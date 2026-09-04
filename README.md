@@ -1,6 +1,8 @@
 <h1>PeopleSoft Trace Insights</h1>
 <p><strong>Next-Gen Browser-Based Diagnostic Engine for PeopleTools</strong></p>
 
+<img src="PSoft_Trace_Insights.png" alt="PeopleSoft Trace Insights Overview" width="900">
+
 <p>
 A fully client-side trace analyzer for PeopleSoft <code>.tracesql</code>, <code>.trc</code>, and <code>.aet</code> files.
 Runs <strong>100% locally in-memory</strong> inside your browser—no uploads, no servers, zero network egress.
