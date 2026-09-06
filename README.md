@@ -43,7 +43,8 @@ Runs <strong>100% locally in-memory</strong> inside your browser—no uploads, n
 <h3>Run the Analyzer</h3>
 <pre><code>git clone https://github.com/sudheersagar/PSoft-Trace-Insights.git
 </code></pre>
-<p>Open <code>PSoft-Trace-Insights.html</code> directly in your browser.<br />
+<p>Open <code>
+https://sudheersagar.github.io/PSoft-Trace-Insights/PSoft-Trace-Insights.html</code> directly in your browser.<br />
 No web server, build step, Node.js runtime, or external dependencies required.</p>
 
 <hr />
