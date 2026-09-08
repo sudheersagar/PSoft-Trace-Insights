@@ -43,7 +43,7 @@ Runs <strong>100% locally in-memory</strong> inside your browser—no uploads, n
 <h3>Run the Analyzer</h3>
 <pre><code>git clone https://github.com/sudheersagar/PSoft-Trace-Insights.git
 </code></pre>
-<p>Open <code>
+<p>Open<code>
 https://sudheersagar.github.io/PSoft-Trace-Insights/PSoft-Trace-Insights.html</code> directly in your browser.<br />
 No web server, build step, Node.js runtime, or external dependencies required.</p>
 
@@ -102,46 +102,12 @@ No web server, build step, Node.js runtime, or external dependencies required.</
     <td>Complete AE diagnostics.</td>
   </tr>
 </table>
-
 <hr />
 
-<h2>Multi-RDBMS Error Mapping</h2>
-<table>
-  <tr>
-    <th>Classification</th>
-    <th>Oracle</th>
-    <th>SQL Server</th>
-    <th>DB2</th>
-  </tr>
-  <tr>
-    <td><code>UNIQUE_CONSTRAINT</code></td>
-    <td>ORA-00001</td>
-    <td>Msg 2627, Msg 2601</td>
-    <td>SQL0803N</td>
-  </tr>
-  <tr>
-    <td><code>NULL_INSERT</code></td>
-    <td>ORA-01400</td>
-    <td>Msg 515</td>
-    <td>SQL0407N</td>
-  </tr>
-  <tr>
-    <td><code>OBJECT_NOT_FOUND</code></td>
-    <td>ORA-00942</td>
-    <td>Msg 208</td>
-    <td>SQL0204N</td>
-  </tr>
-  <tr>
-    <td><code>INVALID_IDENTIFIER</code></td>
-    <td>ORA-00904</td>
-    <td>Msg 207</td>
-    <td>SQL0206N</td>
-  </tr>
-</table>
+<h2>License</h2>
+<p>MIT License &copy; 2026 PeopleSoft Trace Insights</p>
 
 <hr />
 <h1 align="center" style="color: #58a6ff;">
   <strong>⭐ If you find my projects useful, consider giving it a star! ⭐</strong>
 </h1>
-<h2>License</h2>
-<p>MIT License &copy; 2026 PeopleSoft Trace Insights</p>
