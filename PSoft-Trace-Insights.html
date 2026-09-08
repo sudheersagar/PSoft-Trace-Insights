@@ -78,6 +78,13 @@ html, body {
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--a2); }
+html { scrollbar-width: thin; scrollbar-color: var(--border) var(--bg); }
+body, #app, .modal-backdrop, #tc, #compareRoot, #drawer, .drawer-body, .tw, #epc, .stl, #varTimelineContainer, #sc-stats, .compare-step-body, .compare-step-code pre, pre.sql-block, pre.code-block {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+button, input, textarea, select { font: inherit; }
+button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 #app {
   display: flex;
@@ -295,13 +302,13 @@ html, body {
 #sclose { background: none; border: none; color: var(--dim); cursor: pointer; font-size: 15px; padding: 0 4px; }
 
 #cw { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-#tc { flex: 1; overflow-y: auto; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
+#tc { flex: 1; overflow: auto; min-height: 0; min-width: 0; display: flex; flex-direction: column; background: var(--bg); overscroll-behavior: contain; }
 .panel { display: none; height: 100%; }
-.panel.act { display: flex; flex-direction: column; height: 100%; flex: 1; min-height: 0; }
+.panel.act { display: flex; flex-direction: column; height: 100%; flex: 1 1 auto; min-height: 0; min-width: 0; }
 
 /* ── Dashboard & Card Layouts ───────────────────────────────────── */
-#p-overview { overflow: auto; padding: 20px; }
-.dashboard-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+#p-overview { overflow: auto; padding: 20px; min-width: 0; overscroll-behavior: contain; }
+.dashboard-grid { display: grid; min-width: 0; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
 .kpi { padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); min-height: 102px; box-shadow: 0 2px 4px var(--shadow-color); }
 .kpi-label { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
 .kpi-value { font-size: 26px; font-weight: 750; letter-spacing: -.7px; margin-top: 7px; color: var(--text); }
@@ -309,8 +316,8 @@ html, body {
 .kpi.good .kpi-value { color: var(--green); }
 .kpi.warn .kpi-value { color: var(--yellow); }
 .kpi.bad .kpi-value { color: var(--red); }
-.dashboard-lower { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-bottom: 20px; }
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: 0 2px 4px var(--shadow-color); }
+.dashboard-lower { display: grid; min-width: 0; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-bottom: 20px; }
+.card { min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: 0 2px 4px var(--shadow-color); }
 .card-head { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
 .card-title { font-size: 13px; font-weight: 700; color: var(--text); }
 .card-subtitle { font-size: 10px; color: var(--dim); margin-top: 2px; }
@@ -364,12 +371,12 @@ html, body {
 .sr:last-child { border: none; }
 .sk { color: var(--dim); font-size: 11px; max-width: 60%; }
 .sv { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-weight: 600; font-size: 11px; color: var(--text); text-align: right; }
-.chart-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 0 20px 20px; }
-.chart-box { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; height: 280px; box-shadow: 0 2px 4px var(--shadow-color); }
+.chart-container { display: grid; min-width: 0; grid-template-columns: 1fr 1fr; gap: 20px; padding: 0 20px 20px; }
+.chart-box { min-width: 0; overflow: hidden; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; height: 280px; box-shadow: 0 2px 4px var(--shadow-color); }
 .chart-box h3 { font-size: 12px; font-weight: 600; margin-bottom: 15px; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; }
 
 /* ── Data Tables ────────────────────────────────────────────────── */
-.tw { flex: 1; overflow: auto; }
+.tw { flex: 1 1 auto; min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; }
 table.dt { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 table.dt th { background: var(--surface); color: var(--dim); font-weight: 600; padding: 9px 12px; text-align: left; position: sticky; top: 0; z-index: 2; border-bottom: 2px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; font-size: 11px; }
 table.dt th:hover { color: var(--accent); }
@@ -388,8 +395,22 @@ table.dt tr.re td { color: var(--red); font-weight: 500; }
 /* ── Execution Path ─────────────────────────────────────────────── */
 .exec-toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
 .exec-stat { font-size: 11px; color: var(--dim); padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--s2); }
+.exec-stat-trigger { position: relative; display: inline-flex; align-items: center; cursor: help; }
+.exec-stat-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.exec-stat-trigger .exec-stat-popover {
+  position: fixed; left: 0; top: 0; z-index: 205; display: none;
+  width: min(330px, calc(100vw - 24px)); max-width: calc(100vw - 24px);
+  max-height: min(220px, calc(100dvh - 24px)); overflow: auto; overscroll-behavior: contain;
+  padding: 10px 12px; background: var(--surface); color: var(--text);
+  border: 1px solid var(--accent); border-radius: 8px; box-shadow: 0 14px 40px var(--shadow-color);
+  font-family: Inter, system-ui, sans-serif; font-size: 11px; line-height: 1.45;
+  text-align: left; white-space: normal; font-weight: 400;
+}
+.exec-stat-trigger.is-open .exec-stat-popover { display: block; }
+.exec-stat-popover .esp-title { color: var(--accent); font-weight: 800; margin-bottom: 4px; }
+.exec-stat-popover .esp-note { color: var(--dim); }
 .spacer { margin-left: auto; }
-#epc { flex: 1; overflow: auto; padding: 8px 10px; background: var(--bg); }
+#epc { flex: 1 1 auto; min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; padding: 8px 10px; background: var(--bg); }
 .en { display: flex; flex-direction: column; }
 .er { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: 4px; cursor: pointer; transition: background var(--tr), border-color var(--tr); min-height: 26px; border: 1px solid transparent; }
 .er:hover { background: rgba(125, 125, 125, .08); border-color: rgba(45, 212, 191, .2); }
@@ -409,7 +430,7 @@ table.dt tr.re td { color: var(--red); font-weight: 500; }
 .collapsed > .ech { display: none; }
 
 /* ── Stack Traces & Diagnostics ─────────────────────────────────── */
-.stl { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.stl { flex: 1 1 auto; min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .ste { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--red); border-radius: var(--r); padding: 14px 16px; cursor: pointer; transition: var(--tr); box-shadow: 0 2px 4px var(--shadow-color); }
 .ste:hover { border-color: var(--red); transform: translateX(2px); }
 .ste.warn { border-left-color: var(--yellow); }
@@ -419,17 +440,57 @@ table.dt tr.re td { color: var(--red); font-weight: 500; }
 .sto { color: var(--orange); font-size: 11px; margin-bottom: 4px; }
 .stn { font-size: 10px; color: var(--dim); }
 
+
+/* ── Diagnostics Workbench ─────────────────────────────────────── */
+.diag-toolbar{padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:3}
+.diag-search{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 11px;border-radius:6px;font-size:11px;min-width:220px;flex:1;max-width:360px}
+.diag-search:focus{outline:none;border-color:var(--accent)}
+.diag-filter{padding:5px 9px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--dim);font-size:10px;cursor:pointer}
+.diag-filter:hover{border-color:var(--accent);color:var(--text)}
+.diag-filter.active{background:var(--accent);border-color:var(--accent);color:var(--bg);font-weight:700}
+.diag-count{font-size:10px;color:var(--dim);margin-left:auto}
+.diag-card{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:8px;padding:13px 15px;cursor:pointer;box-shadow:0 2px 4px var(--shadow-color)}
+.diag-card:hover{border-color:var(--accent);transform:translateX(2px)}
+.diag-card.critical{border-left-color:var(--red)}
+.diag-card.warning{border-left-color:var(--yellow)}
+.diag-card.info{border-left-color:var(--accent)}
+.diag-card.performance{border-left-color:var(--orange)}
+.diag-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.diag-title{font-size:12px;font-weight:750;color:var(--text)}
+.diag-sev{font-size:9px;font-weight:700;text-transform:uppercase;padding:3px 6px;border-radius:4px;border:1px solid var(--border);color:var(--dim)}
+.diag-card.critical .diag-sev{color:var(--red);border-color:var(--red)}
+.diag-card.warning .diag-sev{color:var(--yellow);border-color:var(--yellow)}
+.diag-card.performance .diag-sev{color:var(--orange);border-color:var(--orange)}
+.diag-symptom{font-size:11px;color:var(--text);margin-top:6px;line-height:1.45}
+.diag-action{font-size:10px;color:var(--dim);margin-top:6px;line-height:1.4}
+.diag-meta{font-size:9px;color:var(--dim);margin-top:8px;display:flex;gap:10px;flex-wrap:wrap}
+.diag-empty{padding:28px 16px;text-align:center;color:var(--dim);border:1px dashed var(--border);border-radius:8px}
+.diag-note{font-size:9px;color:var(--dim);padding:0 16px 4px}
+
 /* ── Variable Timeline ──────────────────────────────────────────── */
 #p-vars { flex: 1; overflow: hidden; display: none; flex-direction: column; }
-.var-toolbar { padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; }
+.var-toolbar { padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .var-input { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 7px 12px; border-radius: var(--r); font-size: 12px; flex: 1; max-width: 360px; }
 .var-input:focus { outline: none; border-color: var(--accent); }
-#varTimelineContainer { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
-.var-entry { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 6px; padding: 10px 14px; box-shadow: 0 1px 3px var(--shadow-color); }
-.var-entry-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+#varTimelineContainer { flex: 1 1 auto; min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.var-summary { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 2px; align-items: center; }
+.var-summary-item { padding: 5px 9px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--dim); font-size: 10px; }
+button.var-summary-item { cursor: pointer; font: inherit; transition: var(--tr); }
+button.var-summary-item:hover { border-color: var(--accent); color: var(--text); transform: translateY(-1px); }
+button.var-summary-item.active { border-color: var(--accent); background: var(--accent); color: var(--bg); font-weight: 700; }
+.var-filter-status { font-size: 10px; color: var(--dim); margin-left: 2px; }
+.var-entry { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 6px; padding: 10px 14px; box-shadow: 0 1px 3px var(--shadow-color); cursor: pointer; transition: var(--tr); }
+.var-entry:hover { border-color: var(--accent); transform: translateX(2px); }
+.var-entry.var-changed { border-left-color: var(--yellow); }
+.var-entry.var-error { border-left-color: var(--red); }
+.var-entry-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 4px; }
 .var-entry-title { font-weight: 700; font-size: 12px; color: var(--accent); }
-.var-entry-meta { font-size: 10px; color: var(--dim); }
+.var-entry-meta { font-size: 10px; color: var(--dim); white-space: nowrap; }
+.var-entry-context { font-size: 10px; color: var(--dim); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .var-entry-val { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; background: var(--s2); padding: 7px 11px; border-radius: 4px; margin-top: 6px; word-break: break-all; color: var(--text); border: 1px solid var(--border); }
+.var-entry-change { font-size: 10px; color: var(--yellow); margin-top: 5px; }
+.var-entry-links { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.var-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; border: 1px solid var(--border); color: var(--dim); }
 
 /* ── Trace Comparison Diff Styles ──────────────────────────────── */
 /* Compare Paths is intentionally outside #main so normal trace analysis never exposes it. */
@@ -456,8 +517,9 @@ table.dt tr.re td { color: var(--red); font-weight: 500; }
 .compare-page-subtitle { margin-top: 2px; font-size: 10px; color: var(--dim); }
 .compare-page-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 #comparePage > #compareRoot {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
   overflow: auto;
   padding: 16px;
 }
@@ -515,11 +577,11 @@ table.dt tr.re td { color: var(--red); font-weight: 500; }
 .diff-step-link { color:var(--accent); text-decoration:underline; text-underline-offset:2px; cursor:pointer; font-weight:700; }
 .diff-step-link:hover { opacity:.85; }
 .diff-step-link:focus { outline:2px solid var(--accent); outline-offset:2px; border-radius:3px; }
-#compareStepModal .compare-step-dialog { max-width:1100px; width:94%; max-height:88vh; overflow:hidden; background:var(--surface); border:1px solid var(--border); border-radius:12px; color:var(--text); box-shadow:0 20px 60px rgba(0,0,0,.5); display:flex; flex-direction:column; }
+#compareStepModal .compare-step-dialog { max-width:1100px; width:min(1100px, 100%); max-height:calc(100dvh - 32px); min-height:0; overflow:hidden; background:var(--surface); border:1px solid var(--border); border-radius:12px; color:var(--text); box-shadow:0 20px 60px rgba(0,0,0,.5); display:flex; flex-direction:column; }
 .compare-step-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 18px; border-bottom:1px solid var(--border); flex-shrink:0; }
 .compare-step-title { font-size:15px; font-weight:750; color:var(--accent); }
-.compare-step-body { padding:16px; overflow:auto; }
-.compare-step-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.compare-step-body { flex:1 1 auto; min-height:0; min-width:0; padding:16px; overflow:auto; overscroll-behavior:contain; }
+.compare-step-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; }
 .compare-step-panel { background:var(--s2); border:1px solid var(--border); border-radius:8px; padding:12px; min-width:0; }
 .compare-step-panel h4 { margin:0 0 9px; font-size:12px; color:var(--accent); }
 .compare-step-meta { display:grid; grid-template-columns:120px 1fr; gap:5px 10px; font-size:11px; margin-bottom:10px; }
@@ -528,7 +590,7 @@ table.dt tr.re td { color: var(--red); font-weight: 500; }
 .compare-step-section { margin-top:14px; }
 .compare-step-section h4 { font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:.04em; margin:0 0 6px; }
 .compare-step-empty { color:var(--dim); font-style:italic; font-size:11px; }
-.compare-step-code pre { max-height:280px; overflow:auto; }
+.compare-step-code pre { max-height:280px; max-width:100%; overflow:auto; overscroll-behavior:contain; }
 @media (max-width:700px){ .compare-step-grid{grid-template-columns:1fr;} .compare-step-meta{grid-template-columns:90px 1fr;} }
 
 .diff-match { background: transparent; }
@@ -562,13 +624,13 @@ table.dt tr.re td { color: var(--red); font-weight: 500; }
 /* ── Slide-Out Detail Drawer ────────────────────────────────────── */
 #drawerBackdrop { position: fixed; inset: 0; background: rgba(0,0,0,.6); backdrop-filter: blur(4px); z-index: 40; display: none; }
 #drawerBackdrop.on { display: block; }
-#drawer { position: fixed; right: 0; top: 0; bottom: 0; width: min(720px, 95vw); background: var(--surface); border-left: 1px solid var(--border); z-index: 50; transform: translateX(100%); transition: transform .32s cubic-bezier(.2, .8, .2, 1); display: flex; flex-direction: column; box-shadow: -20px 0 60px -10px rgba(0,0,0,.5); }
+#drawer { position: fixed; right: 0; top: 0; bottom: 0; width: min(720px, 95vw); max-width: 100%; background: var(--surface); border-left: 1px solid var(--border); z-index: 50; transform: translateX(100%); transition: transform .32s cubic-bezier(.2, .8, .2, 1); display: flex; flex-direction: column; box-shadow: -20px 0 60px -10px rgba(0,0,0,.5); }
 #drawer.open { transform: translateX(0); }
 .drawer-head { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
 .drawer-head h2 { font-size: 15px; margin: 0; font-weight: 700; color: var(--text); }
 .drawer-close { margin-left: auto; background: transparent; border: 1px solid var(--border); color: var(--dim); width: 32px; height: 32px; border-radius: 6px; cursor: pointer; }
 .drawer-close:hover { color: #fff; border-color: var(--red); background: var(--red); }
-.drawer-body { flex: 1; overflow-y: auto; padding: 20px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; line-height: 1.6; color: var(--text); }
+.drawer-body { flex: 1 1 auto; min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; padding: 20px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; line-height: 1.6; color: var(--text); }
 .lbl { color: var(--accent); font-weight: 700; display: block; margin-top: 12px; margin-bottom: 4px; text-transform: uppercase; font-size: 10.5px; letter-spacing: .5px; }
 .err { color: var(--red); }
 .val { color: var(--text); }
@@ -580,10 +642,11 @@ pre.sql-block, pre.code-block { background: var(--code-bg); border: 1px solid va
 .copy-btn:hover { color: var(--accent); border-color: var(--accent); }
 
 /* ── Modals (Help, Readme & Compare) ─────────────────────────────── */
-.modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); backdrop-filter: blur(4px); z-index: 100; align-items: center; justify-content: center; padding: 20px; }
+.modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); backdrop-filter: blur(4px); z-index: 100; align-items: center; justify-content: center; padding: 16px; overflow: auto; overscroll-behavior: contain; }
 .modal-backdrop.on { display: flex; }
-#helpModalBox, #readmeModalBox { max-width: 1020px; max-height: 90vh; overflow-y: auto; background: var(--surface); padding: 0; position: relative; border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.5); width: 100%; color: var(--text); }
-#helpModalContent, #readmeModalContent { padding: 24px; font-size: 13px; line-height: 1.5; }
+#compareModalBox { max-width:740px; width:min(740px,100%); max-height:calc(100dvh - 32px); min-height:0; overflow:auto; }
+#helpModalBox, #readmeModalBox { max-width: 1020px; width: min(1020px, 100%); max-height: calc(100dvh - 32px); min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--surface); padding: 0; position: relative; border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.5); color: var(--text); }
+#helpModalContent, #readmeModalContent { padding: 24px; font-size: 13px; line-height: 1.5; overflow: auto; min-height: 0; min-width: 0; overscroll-behavior: contain; }
 #helpModalContent .container, #readmeModalContent .container { max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
 #helpModalContent header, #readmeModalContent header { border-bottom: 2px solid var(--accent); padding-bottom: 10px; }
 #helpModalContent header h1, #readmeModalContent header h1 { font-size: 18px; color: var(--accent); font-weight: 800; }
@@ -592,11 +655,92 @@ pre.sql-block, pre.code-block { background: var(--code-bg); border: 1px solid va
 #helpModalContent .grid, #readmeModalContent .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; }
 #helpModalContent .card, #readmeModalContent .card { background: var(--s2); border: 1px solid var(--border); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
 #helpModalContent .card-flags, #readmeModalContent .card-flags { font-family: ui-monospace, monospace; color: var(--yellow); font-size: 11px; font-weight: 700; }
-#helpModalContent table, #readmeModalContent table { width: 100%; border-collapse: collapse; font-size: 11px; background: var(--s2); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+#helpModalContent table, #readmeModalContent table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 11px; background: var(--s2); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 #helpModalContent th, #helpModalContent td, #readmeModalContent th, #readmeModalContent td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: left; }
 #helpModalContent th, #readmeModalContent th { background: var(--surface); font-size: 10px; text-transform: uppercase; color: var(--dim); }
 #helpModalContent .val, #readmeModalContent .val { font-family: ui-monospace, monospace; color: var(--yellow); font-weight: 700; width: 60px; }
 #helpModalContent .two-col, #readmeModalContent .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+/* ── Trace Flag Evidence Hover ───────────────────────────────────── */
+.trace-flag-value {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: help;
+  border-bottom: 1px dotted var(--accent);
+}
+.trace-profile-card { overflow: visible; }
+.trace-profile-card .card-body { overflow: visible; }
+.trace-flag-value .trace-flag-popover {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 200;
+  display: none;
+  width: min(460px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: min(360px, calc(100dvh - 32px));
+  overflow: auto;
+  padding: 12px 14px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 9px;
+  box-shadow: 0 14px 40px rgba(0,0,0,.45);
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
+}
+.trace-flag-value.is-open .trace-flag-popover,
+.rca-coverage-trigger.is-open .rca-coverage-popover { display: block; }
+.rca-coverage-trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: help;
+}
+.rca-coverage-trigger .rca-coverage-popover {
+  position: fixed;
+  left: 0; top: 0; z-index: 205; display: none;
+  width: min(430px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: min(330px, calc(100dvh - 24px));
+  overflow: auto; overscroll-behavior: contain;
+  padding: 13px 15px; background: var(--surface); color: var(--text);
+  border: 1px solid var(--accent); border-radius: 9px;
+  box-shadow: 0 14px 40px var(--shadow-color);
+  font-family: Inter, system-ui, sans-serif; font-size: 11px; line-height: 1.5;
+  text-align: left; white-space: normal;
+}
+.rca-coverage-popover .tcp-title { color: var(--accent); font-weight: 800; margin-bottom: 7px; }
+.rca-coverage-popover .tcp-note { color: var(--dim); margin-bottom: 9px; }
+.rca-coverage-popover .tcp-formula {
+  padding: 8px 10px; background: var(--code-bg); border: 1px solid var(--border);
+  border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  color: var(--text); margin-bottom: 9px;
+}
+.rca-coverage-popover .tcp-row {
+  display: grid; grid-template-columns: 1fr auto; gap: 10px;
+  padding: 5px 0; border-bottom: 1px solid var(--border);
+}
+.rca-coverage-popover .tcp-row:last-child { border-bottom: 0; }
+.rca-coverage-popover .tcp-weight { color: var(--yellow); font-family: ui-monospace, monospace; font-weight: 700; }
+.rca-coverage-popover .tcp-status { color: var(--green); font-weight: 700; }
+.rca-coverage-popover .tcp-status.miss { color: var(--dim); }
+.trace-flag-popover .tfp-title { color: var(--accent); font-weight: 800; margin-bottom: 7px; }
+.trace-flag-popover .tfp-row { display: grid; grid-template-columns: 92px 1fr; gap: 8px; margin: 4px 0; }
+.trace-flag-popover .tfp-k { color: var(--dim); font-weight: 600; }
+.trace-flag-popover .tfp-v { color: var(--text); word-break: break-word; }
+.trace-flag-popover .tfp-evidence {
+  margin-top: 8px; padding: 7px 9px; background: var(--code-bg);
+  border: 1px solid var(--border); border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px; white-space: pre-wrap; word-break: break-word;
+}
+.trace-flag-popover .tfp-bit { color: var(--yellow); font-family: ui-monospace, monospace; }
 
 /* Readme-Specific Styling Enhancements */
 .readme-badge-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
@@ -638,6 +782,20 @@ pre.sql-block, pre.code-block { background: var(--code-bg); border: 1px solid va
   .dashboard-grid { grid-template-columns: 1fr; }
   .compare-page-head { align-items: flex-start; flex-direction: column; }
   .compare-page-actions { width: 100%; }
+}
+</style>
+<style id="ui-hardening-overrides">
+[data-theme="light"] .modal-backdrop { background: rgba(15,23,42,.42); }
+[data-theme="light"] #drawerBackdrop { background: rgba(15,23,42,.38); }
+[data-theme="light"] .drawer-close:hover { color: #fff; }
+[data-theme="light"] .trace-flag-popover { box-shadow: 0 16px 44px rgba(15,23,42,.22); }
+@media (max-width: 700px) {
+  .modal-backdrop { padding: 8px; align-items: flex-start; }
+  #helpModalBox, #readmeModalBox, #compareModalBox, #compareStepModal .compare-step-dialog { max-height: calc(100dvh - 16px); }
+  #helpModalContent, #readmeModalContent, .compare-step-body { padding: 16px; }
+  .compare-step-grid { grid-template-columns: minmax(0,1fr); }
+  .compare-page-head { min-width: 0; }
+  .compare-page-actions { min-width: 0; }
 }
 </style>
 </head>
@@ -1105,13 +1263,15 @@ function toggleTheme() {
 var G = {
   sql:[], byWhere:[], byFrom:[], tables:[], stacks:[], valueIssues:[],
   execPath:[], allCalls:[], stats:[], vars:[], maxDepth:0, meta:{},
-  insights:{}, sqlFingerprints:[], rca:{}, varEvents:[], varMap:{},
+  insights:{}, sqlFingerprints:[], rca:{}, varEvents:[], varMap:{}, varActiveFilter:'ALL', varFlowTruncated:false,
   ae:{steps:[],timings:[],tempTables:[]},
   transactions:{commits:[],rollbacks:[],connects:[],disconnects:[]},
   cursorStats:{}, peopleCodeHotspots:[], tempTableStats:[], variableSQLLinks:[],
-  traceFlags:{}, traceFlagsExplicit:{}
+  traceFlags:{}, traceFlagsExplicit:{}, traceFlagEvidence:{}
 };
 var slowSec = 1.0, curTab = 'overview', curSQL = 'all', sortK = null, sortD = 1;
+var varActiveFilter = 'ALL';
+var diagActiveFilter = 'ALL';
 
 // ── File Loading & Drag-and-Drop ───────────────────────────────────
 var dz = document.getElementById('dz');
@@ -1121,6 +1281,11 @@ dz.addEventListener('drop', function(e) { e.preventDefault(); dz.classList.remov
 function onFile(e) { var f = e.target.files[0]; if (f) load(f); }
 
 function load(file) {
+  // Reset the UI filter immediately when a different trace is selected.
+  // The parser also resets the complete trace model when parsing starts.
+  G.varActiveFilter = 'ALL';
+  varActiveFilter = 'ALL';
+  diagActiveFilter = 'ALL';
   var MAX_SAFE_SIZE = 200 * 1024 * 1024;
   if (file.size > MAX_SAFE_SIZE) {
     if (!confirm('This trace file is very large (' + (file.size / 1048576).toFixed(1) + 'MB). Parsing may require significant client memory. Proceed?')) {
@@ -1162,6 +1327,14 @@ function extractPreParseMetadata(lines, fname) {
     TraceAEEnableSection: null,
     AETFileSize: null
   };
+  var flagEvidence = {
+    TraceSQL: null,
+    TracePC: null,
+    TraceAE: null,
+    TraceAECombineOutput: null,
+    TraceAEEnableSection: null,
+    AETFileSize: null
+  };
 
   var metaFound = {
     toolsRel: '',
@@ -1171,8 +1344,12 @@ function extractPreParseMetadata(lines, fname) {
     processName: ''
   };
 
-  var maxScan = Math.min(lines.length, 2000);
-  for (var i = 0; i < maxScan; i++) {
+  /*
+   * Trace flags are trace-file metadata. Do not derive them from the amount of
+   * SQL/PeopleCode that happened to parse. Scan the complete original file so
+   * a stamped flag appearing after the first 2,000 lines is still authoritative.
+   */
+  for (var i = 0; i < lines.length; i++) {
     var l = String(lines[i] || '').trim();
     if (!l) continue;
 
@@ -1212,6 +1389,12 @@ function extractPreParseMetadata(lines, fname) {
         if (/^0x/i.test(raw)) flags[key] = parseInt(raw, 16);
         else if (/^\d+$/.test(raw)) flags[key] = parseInt(raw, 10);
         else flags[key] = raw.toUpperCase();
+        flagEvidence[key] = {
+          kind: 'explicit',
+          line: i + 1,
+          rawToken: raw,
+          rawLine: String(lines[i] || '')
+        };
       }
     };
 
@@ -1229,6 +1412,7 @@ function extractPreParseMetadata(lines, fname) {
     TracePC: flags.TracePC !== null,
     TraceAE: flags.TraceAE !== null
   };
+  G.traceFlagEvidence = flagEvidence;
 
   G.meta = {
     fileName: fname,
@@ -1244,7 +1428,25 @@ function extractPreParseMetadata(lines, fname) {
 }
 
 // ── Core Parsing Engine ────────────────────────────────────────────
+function resetTraceState() {
+  // A new trace must never inherit parser results or Variable Flow filters
+  // from the previously loaded trace.
+  G = {
+    sql:[], byWhere:[], byFrom:[], tables:[], stacks:[], valueIssues:[],
+    execPath:[], allCalls:[], stats:[], vars:[], maxDepth:0, meta:{},
+    insights:{}, sqlFingerprints:[], rca:{}, varEvents:[], varMap:{},
+    varActiveFilter:'ALL', varFlowTruncated:false,
+    ae:{steps:[],timings:[],tempTables:[]},
+    transactions:{commits:[],rollbacks:[],connects:[],disconnects:[]},
+    cursorStats:{}, peopleCodeHotspots:[], tempTableStats:[], variableSQLLinks:[],
+    traceFlags:{}, traceFlagsExplicit:{}, traceFlagEvidence:{}
+  };
+  varActiveFilter = 'ALL';
+  diagActiveFilter = 'ALL';
+}
+
 function parse(text, fname, prog) {
+  resetTraceState();
   var lines = text.split(/\r?\n/), N = lines.length;
   
   extractPreParseMetadata(lines, fname);
@@ -1309,6 +1511,7 @@ function parse(text, fname, prog) {
   buildAgg();
   reconcileMissingTraceFlags();
   improveSQLMetadata();
+  enrichVariableFlow();
   correlateVariablesToSQL();
   analyzeCursorLifecycle();
   analyzePeopleCodeHotspots();
@@ -1325,28 +1528,99 @@ function parse(text, fname, prog) {
 // ── Heuristic Reconciliation for Traces Without Explicit Banners ──
 function reconcileMissingTraceFlags() {
   var flags = G.traceFlags;
+  var evidence = G.traceFlagEvidence || (G.traceFlagEvidence = {});
 
   if (flags.TraceSQL === null && (G.sql || []).length > 0) {
     var inferredSQL = 1;
-    if (G.sql.some(function(s) { return s.curB && s.curB.length > 0; })) inferredSQL |= 2;
-    if (G.transactions && (G.transactions.commits.length > 0 || G.transactions.rollbacks.length > 0)) inferredSQL |= 4;
-    if (G.sql.some(function(s) { return s.fc > 0; })) inferredSQL |= 8;
+    var sqlEvidence = [];
+    var firstSql = G.sql[0];
+    if (firstSql) sqlEvidence.push('Bit 1 — SQL statement observed at trace line ' + (firstSql.lineNumber || 'unknown') + '.');
+
+    var bindSql = G.sql.find(function(s) { return s.curB && s.curB.length > 0; });
+    if (bindSql) {
+      inferredSQL |= 2;
+      var bindLine = bindSql.runs && bindSql.runs[0] ? bindSql.runs[0].line : bindSql.lineNumber;
+      sqlEvidence.push('Bit 2 — bind variable data observed near trace line ' + (bindLine || 'unknown') + '.');
+    }
+
+    var tx = G.transactions || { commits:[], rollbacks:[] };
+    var txEvidence = (tx.commits || [])[0] || (tx.rollbacks || [])[0];
+    if (txEvidence) {
+      inferredSQL |= 4;
+      sqlEvidence.push('Bit 4 — ' + (txEvidence.raw || 'transaction boundary') + ' at trace line ' + txEvidence.line + '.');
+    }
+
+    var fetchSql = G.sql.find(function(s) { return s.fc > 0 && s.fetches && s.fetches.length; });
+    if (fetchSql) {
+      inferredSQL |= 8;
+      var fetchLine = fetchSql.fetches[0].line || fetchSql.lineNumber;
+      sqlEvidence.push('Bit 8 — successful Fetch event observed at trace line ' + (fetchLine || 'unknown') + '.');
+    }
+
     flags.TraceSQL = inferredSQL;
+    evidence.TraceSQL = {
+      kind: 'inferred',
+      basis: 'Derived only from trace events parsed from the original file.',
+      lines: sqlEvidence
+    };
   }
 
   if (flags.TracePC === null && ((G.allCalls || []).length > 0 || (G.varEvents || []).length > 0)) {
     var inferredPC = 0;
-    if (G.allCalls.some(function(c) { return c.type === 'NORMAL' || c.type === 'EXTERNAL' || c.type === 'CALL'; })) inferredPC |= 1;
-    if (G.varEvents.some(function(v) { return v.type === 'ASSIGN' || v.type === 'FIELD_ASSIGN' || v.type === 'STORE'; })) inferredPC |= 4;
-    if (G.varEvents.some(function(v) { return v.type === 'FETCH'; })) inferredPC |= 8;
-    if (inferredPC > 0) flags.TracePC = inferredPC;
+    var pcEvidence = [];
+
+    var pcCall = G.allCalls.find(function(c) { return c.type === 'NORMAL' || c.type === 'EXTERNAL' || c.type === 'CALL'; });
+    if (pcCall) {
+      inferredPC |= 1;
+      pcEvidence.push('Bit 1 — PeopleCode execution event observed at trace line ' + (pcCall.startLine || 'unknown') + '.');
+    }
+
+    var assign = G.varEvents.find(function(v) { return v.type === 'ASSIGN' || v.type === 'FIELD_ASSIGN' || v.type === 'STORE'; });
+    if (assign) {
+      inferredPC |= 4;
+      pcEvidence.push('Bit 4 — variable/field assignment or Store event observed at trace line ' + (assign.line || 'unknown') + '.');
+    }
+
+    var fetch = G.varEvents.find(function(v) { return v.type === 'FETCH'; });
+    if (fetch) {
+      inferredPC |= 8;
+      pcEvidence.push('Bit 8 — PeopleCode Fetch Field event observed at trace line ' + (fetch.line || 'unknown') + '.');
+    }
+
+    if (inferredPC > 0) {
+      flags.TracePC = inferredPC;
+      evidence.TracePC = {
+        kind: 'inferred',
+        basis: 'Derived only from PeopleCode execution/value events parsed from the original file.',
+        lines: pcEvidence
+      };
+    }
   }
 
   if (flags.TraceAE === null && G.meta && /Application Engine|AE SQL/.test(G.meta.format || '')) {
     var inferredAE = 1;
-    if ((G.sql || []).length > 0) inferredAE |= 2;
-    if ((G.ae && G.ae.timings && G.ae.timings.length > 0)) inferredAE |= 128;
+    var aeEvidence = [];
+    var aeStep = (G.allCalls || []).find(function(c) { return !!c.aeProgram; });
+    if (aeStep) aeEvidence.push('Bit 1 — Application Engine step observed at trace line ' + (aeStep.startLine || 'unknown') + '.');
+
+    var aeSql = (G.sql || [])[0];
+    if (aeSql) {
+      inferredAE |= 2;
+      aeEvidence.push('Bit 2 — Application Engine SQL observed at trace line ' + (aeSql.lineNumber || 'unknown') + '.');
+    }
+
+    var aeTiming = G.ae && G.ae.timings ? G.ae.timings[0] : null;
+    if (aeTiming) {
+      inferredAE |= 128;
+      aeEvidence.push('Bit 128 — Application Engine timing observed at trace line ' + (aeTiming.line || 'unknown') + '.');
+    }
+
     flags.TraceAE = inferredAE;
+    evidence.TraceAE = {
+      kind: 'inferred',
+      basis: 'Derived only from Application Engine events parsed from the original file.',
+      lines: aeEvidence
+    };
   }
 }
 
@@ -1561,6 +1835,24 @@ VarProc.prototype.pl = function(line, ln) {
 VarProc.prototype.done = function() {};
 
 // ── Execution Tree & PeopleCode Parser ────────────────────────────
+// Shared trace-line prefix stripper. Built from the trace file's own self-documented column
+// layout (SEQNUM  HH:MM:SS.mmm  ELAPSED_SECONDS) plus the PSAPPSRV context prefix. Factored
+// out because ExecProc.captureCode and VariableFlowProc.pl each need the identical strip
+// before matching source-code/Fetch/Store patterns; keeping one copy means a future fix to
+// this sequence (this exact regex chain has a documented history of needing real-trace
+// validation) only has to be made once.
+function stripTraceLinePrefix(line) {
+  var s = String(line || '').trim();
+  s = s.replace(/^\d+\s+\d{1,2}:\d{2}:\d{2}(?:\.\d+)?\s+[\d.]+\s+/, '');
+  s = s.replace(/^PSAPPSRV\.\d+(?:\s+\(\d+\))?\s+/i, '');
+  s = s.replace(/^\d+-\d+\s+/, '');
+  s = s.replace(/^\d+:\s+(?=\d)/, '');
+  s = s.replace(/^\d{4}[-./]\d{2}[-./]\d{2}[-.\sT]?\s*/, '');
+  s = s.replace(/^(?:\d{1,2}:)?\d{1,2}:\d{2}(?:\.\d+)?\s+/, '');
+  s = s.replace(/^[\d.]+\s+/, '');
+  return s;
+}
+
 function ExecProc(isAET) {
   this.isAET = isAET || false; this.ctxs = {}; this.lastContext = null;
   this.rCtx = /^(PSAPPSRV\.\d+).+?(\(\d+\))/;
@@ -1593,14 +1885,7 @@ ExecProc.prototype.captureCode = function(ctx, line) {
   if (/\bBegin\s+\S+\s+level\s+\d+\s+row\s+\d+\b/i.test(line)) return;
   if (/\bEnd\s+\S+\s+level\s+\d+\s+row\s+\d+\b/i.test(line)) return;
 
-  var s = String(line || '').trim();
-  s = s.replace(/^\d+\s+\d{1,2}:\d{2}:\d{2}(?:\.\d+)?\s+[\d.]+\s+/, '');
-  s = s.replace(/^PSAPPSRV\.\d+(?:\s+\(\d+\))?\s+/i, '');
-  s = s.replace(/^\d+-\d+\s+/, '');
-  s = s.replace(/^\d+:\s+(?=\d)/, '');
-  s = s.replace(/^\d{4}[-./]\d{2}[-./]\d{2}[-.\sT]?\s*/, '');
-  s = s.replace(/^(?:\d{1,2}:)?\d{1,2}:\d{2}(?:\.\d+)?\s+/, '');
-  s = s.replace(/^[\d.]+\s+/, '');
+  var s = stripTraceLinePrefix(line);
 
   var m = s.match(/^(\d+):\s*(.*)$/);
   if (!m) return;
@@ -1757,7 +2042,11 @@ function ValueDiagnosticProc() {
   this.currentProg = '';
 }
 ValueDiagnosticProc.prototype.pl = function(line, ln) {
-  var mProg = line.match(/>>>>>\s*Begin\s+(\S+)\s+level/);
+  // Matches the same "Begin X level N [row M]" shape that ExecProc.captureCode already
+  // recognizes elsewhere in this file (with no fixed arrow-count requirement), instead of
+  // the previous >>>>>-only pattern which did not match that convention and left
+  // this.currentProg permanently empty on real traces.
+  var mProg = line.match(/(?:[<>]{2,}\s*)?\bBegin\s+(\S+)\s+level\s+\d+(?:\s+row\s+\d+)?\b/i);
   if (mProg) { this.currentProg = mProg[1]; this.nullFields.clear(); }
   
   var m = this.rUninit.exec(line);
@@ -1810,22 +2099,19 @@ ValueDiagnosticProc.prototype.done = function() {};
 // ── Variable & Field Timeline Flow ────────────────────────────────
 function VariableFlowProc() {
   this.maxEvents = 60000;
-  this.rFetch = /Fetch Field:\s+(\S+)\s+Value=(.*)/;
-  this.rStore = /Store Field:\s+(\S+)\s+Value=(.*)/;
-  this.rAssign = /^\s*(&\w+)\s*=\s*(.+?);\s*$/;
-  this.rFieldAssign = /^\s*(\w+\.\w+)\s*=\s*(.+?);\s*$/;
+  this.rFetch = /Fetch Field:\s+([A-Za-z_][\w$]*(?:\.[A-Za-z_][\w$]*)*)\s+Value=(.*)/i;
+  this.rStore = /Store Field:\s+([A-Za-z_][\w$]*(?:\.[A-Za-z_][\w$]*)*)\s+Value=(.*)/i;
+  // Allows any repeated mix of [index] and .property access (e.g. &Obj.Prop1.Prop2,
+  // &Array[1][2], &Rowset[1].GetRow(1).GetRecord()...Field) instead of a single fixed
+  // [index] followed by a single .property — the previous shape silently failed to match,
+  // and therefore never captured, any chained App Class property or multi-dim array target.
+  this.rAssign = /^\s*(&[A-Za-z_]\w*(?:\[[^\]]+\]|\.[A-Za-z_]\w*)*)\s*(=|\+=|-=|\*=|\/=)\s*(.+?);\s*$/;
+  this.rFieldAssign = /^\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+)\s*(=|\+=|-=|\*=|\/=)\s*(.+?);\s*$/;
 }
 VariableFlowProc.prototype.pl = function(line, ln) {
-  if (G.varEvents.length >= this.maxEvents) return;
-  var s = String(line || '').trim();
-  s = s.replace(/^\d+\s+\d{1,2}:\d{2}:\d{2}(?:\.\d+)?\s+[\d.]+\s+/, '');
-  s = s.replace(/^PSAPPSRV\.\d+(?:\s+\(\d+\))?\s+/i, '');
-  s = s.replace(/^\d+-\d+\s+/, '');
-  s = s.replace(/^\d+:\s+(?=\d)/, '');
-  s = s.replace(/^\d{4}[-./]\d{2}[-./]\d{2}[-.\sT]?\s*/, '');
-  s = s.replace(/^(?:\d{1,2}:)?\d{1,2}:\d{2}(?:\.\d+)?\s+/, '');
-  s = s.replace(/^[\d.]+\s+/, '');
-  
+  if (G.varEvents.length >= this.maxEvents) { G.varFlowTruncated = true; return; }
+  var s = stripTraceLinePrefix(line);
+
   var m = this.rFetch.exec(s);
   if (m) { this.record(ln, 'FETCH', m[1], m[2], s); return; }
   m = this.rStore.exec(s);
@@ -1835,13 +2121,13 @@ VariableFlowProc.prototype.pl = function(line, ln) {
   if (mCode) {
     var stmt = mCode[1].trim();
     m = this.rAssign.exec(stmt);
-    if (m) { this.record(ln, 'ASSIGN', m[1], m[2], stmt); return; }
+    if (m) { this.record(ln, m[2] === '=' ? 'ASSIGN' : 'COMPOUND_ASSIGN', m[1], m[3], stmt, m[2]); return; }
     m = this.rFieldAssign.exec(stmt);
-    if (m && !stmt.startsWith('&')) { this.record(ln, 'FIELD_ASSIGN', m[1], m[2], stmt); }
+    if (m && !stmt.startsWith('&')) { this.record(ln, m[2] === '=' ? 'FIELD_ASSIGN' : 'FIELD_COMPOUND_ASSIGN', m[1], m[3], stmt, m[2]); }
   }
 };
-VariableFlowProc.prototype.record = function(ln, type, variable, val, raw) {
-  var ev = { line: ln, type: type, variable: variable, value: (val || '').trim(), raw: raw };
+VariableFlowProc.prototype.record = function(ln, type, variable, val, raw, operator) {
+  var ev = { line: ln, type: type, variable: variable, value: (val || '').trim(), raw: raw, operator: operator || '=', eventIndex: G.varEvents.length, context: '', callType: '', callLine: 0, callEndLine: 0, callDepth: 0, aeStep: '', previousValue: null, changeType: 'INITIAL', sqlLinks: [] };
   var idx = G.varEvents.length;
   G.varEvents.push(ev);
   var key = variable.toLowerCase();
@@ -1855,14 +2141,242 @@ VariableFlowProc.prototype.record = function(ln, type, variable, val, raw) {
 };
 VariableFlowProc.prototype.done = function() {};
 
+// ── Profile Flag Popover Positioning ───────────────────────────────
+function positionTraceFlagPopover(trigger) {
+  if (!trigger) return;
+  var pop = trigger.querySelector('.trace-flag-popover');
+  if (!pop) return;
+  var r = trigger.getBoundingClientRect();
+  var gap = 8, pad = 12;
+  var vw = window.innerWidth || document.documentElement.clientWidth;
+  var vh = window.innerHeight || document.documentElement.clientHeight;
+  // Make it measurable before calculating its final viewport-clamped position.
+  pop.style.display = 'block';
+  pop.style.left = '0px';
+  pop.style.top = '0px';
+  var pw = Math.min(pop.offsetWidth || 460, vw - pad * 2);
+  var ph = pop.offsetHeight || 220;
+  var left = r.left;
+  if (left + pw > vw - pad) left = vw - pw - pad;
+  if (left < pad) left = pad;
+  var top = r.bottom + gap;
+  if (top + ph > vh - pad && r.top - gap - ph >= pad) top = r.top - gap - ph;
+  if (top < pad) top = pad;
+  pop.style.left = Math.round(left) + 'px';
+  pop.style.top = Math.round(top) + 'px';
+}
+function bindTraceFlagPopovers(root) {
+  if (!root) return;
+  root.querySelectorAll('.trace-flag-value').forEach(function(trigger) {
+    var open = function(){
+      closeTransientPopovers();
+      trigger.classList.add('is-open');
+      positionTraceFlagPopover(trigger);
+    };
+    trigger.addEventListener('mouseenter', open);
+    trigger.addEventListener('focusin', open);
+    trigger.addEventListener('mouseleave', function(){ closePopoverTrigger(trigger); });
+    trigger.addEventListener('focusout', function(e){
+      if (!trigger.contains(e.relatedTarget)) closePopoverTrigger(trigger);
+    });
+  });
+}
+
+// ── RCA Coverage Popover Positioning ───────────────────────────────
+function positionFixedPopover(trigger, selector) {
+  if (!trigger) return;
+  var pop = trigger.querySelector(selector);
+  if (!pop) return;
+  var r = trigger.getBoundingClientRect();
+  var gap = 8, pad = 12;
+  var vw = window.innerWidth || document.documentElement.clientWidth;
+  var vh = window.innerHeight || document.documentElement.clientHeight;
+  pop.style.display = 'block';
+  pop.style.left = '0px'; pop.style.top = '0px';
+  var pw = Math.min(pop.offsetWidth || 430, vw - pad * 2);
+  var ph = pop.offsetHeight || 220;
+  var left = r.left;
+  if (left + pw > vw - pad) left = vw - pw - pad;
+  if (left < pad) left = pad;
+  var top = r.bottom + gap;
+  if (top + ph > vh - pad && r.top - gap - ph >= pad) top = r.top - gap - ph;
+  if (top < pad) top = pad;
+  pop.style.left = Math.round(left) + 'px';
+  pop.style.top = Math.round(top) + 'px';
+}
+
+function positionExecStatPopover(trigger) {
+  if (!trigger) return;
+  var pop = trigger.querySelector('.exec-stat-popover');
+  if (!pop) return;
+  var r = trigger.getBoundingClientRect();
+  var gap = 7, pad = 12;
+  var vw = window.innerWidth || document.documentElement.clientWidth;
+  var vh = window.innerHeight || document.documentElement.clientHeight;
+  pop.style.display = 'block'; pop.style.left = '0px'; pop.style.top = '0px';
+  var pw = Math.min(pop.offsetWidth || 330, vw - pad * 2);
+  var ph = pop.offsetHeight || 120;
+  var left = r.left;
+  if (left + pw > vw - pad) left = vw - pw - pad;
+  if (left < pad) left = pad;
+  var top = r.bottom + gap;
+  if (top + ph > vh - pad && r.top - gap - ph >= pad) top = r.top - gap - ph;
+  if (top < pad) top = pad;
+  pop.style.left = Math.round(left) + 'px';
+  pop.style.top = Math.round(top) + 'px';
+}
+
+function bindExecStatPopovers(root) {
+  if (!root) return;
+  root.querySelectorAll('.exec-stat-trigger').forEach(function(trigger) {
+    var open = function() {
+      closeTransientPopovers();
+      trigger.classList.add('is-open');
+      positionExecStatPopover(trigger);
+    };
+    trigger.addEventListener('mouseenter', open);
+    trigger.addEventListener('focusin', open);
+    trigger.addEventListener('mouseleave', function() { closePopoverTrigger(trigger); });
+    trigger.addEventListener('focusout', function(e) {
+      if (!trigger.contains(e.relatedTarget)) closePopoverTrigger(trigger);
+    });
+  });
+}
+
+function closePopoverTrigger(trigger) {
+  if (!trigger) return;
+  trigger.classList.remove('is-open');
+  var pop = trigger.querySelector('.trace-flag-popover, .rca-coverage-popover, .exec-stat-popover');
+  if (pop) {
+    pop.style.display = 'none';
+    pop.style.left = '';
+    pop.style.top = '';
+  }
+}
+
+function closeTransientPopovers(exceptTrigger) {
+  document.querySelectorAll('.trace-flag-value.is-open, .rca-coverage-trigger.is-open, .exec-stat-trigger.is-open').forEach(function(el) {
+    if (exceptTrigger && el === exceptTrigger) return;
+    closePopoverTrigger(el);
+  });
+}
+
+function bindCoveragePopover(trigger) {
+  if (!trigger) return;
+  var open = function() {
+    closeTransientPopovers();
+    trigger.classList.add('is-open');
+    positionFixedPopover(trigger, '.rca-coverage-popover');
+  };
+  trigger.addEventListener('mouseenter', open);
+  trigger.addEventListener('focusin', open);
+  trigger.addEventListener('mouseleave', function() { closePopoverTrigger(trigger); });
+  trigger.addEventListener('focusout', function(e) {
+    if (!trigger.contains(e.relatedTarget)) closePopoverTrigger(trigger);
+  });
+}
+
+// Global transient-popover dismissal. Hover/focus alone is not enough because
+// a fixed-position popup can otherwise retain inline display after its trigger
+// loses state. Any click/tap or focus move outside the active trigger closes it.
+document.addEventListener('pointerdown', function(e) {
+  var active = document.querySelector('.trace-flag-value.is-open, .rca-coverage-trigger.is-open, .exec-stat-trigger.is-open');
+  if (active && !active.contains(e.target)) closePopoverTrigger(active);
+}, true);
+document.addEventListener('focusin', function(e) {
+  var active = document.querySelector('.trace-flag-value.is-open, .rca-coverage-trigger.is-open, .exec-stat-trigger.is-open');
+  if (active && !active.contains(e.target)) closePopoverTrigger(active);
+}, true);
+document.addEventListener('click', function(e) {
+  var active = document.querySelector('.trace-flag-value.is-open, .rca-coverage-trigger.is-open, .exec-stat-trigger.is-open');
+  if (active && !active.contains(e.target)) closePopoverTrigger(active);
+}, true);
+
 // ── Profile Card Component ─────────────────────────────────────────
 function renderTraceProfileCard(I) {
   var meta = card('Trace Profile & Parameters', 'Captured system flags and runtime configuration');
+  meta.classList.add('trace-profile-card');
   var mb = meta.querySelector('.card-body'), mg = document.createElement('div');
   mg.className = 'meta-grid';
 
   var flags = G.traceFlags || {};
   var isExp = G.traceFlagsExplicit || {};
+  var evidence = G.traceFlagEvidence || {};
+
+  var flagBits = {
+    TraceSQL: {
+      1:'SQL statements',
+      2:'Bind variables',
+      4:'Connect / disconnect / commit / rollback context',
+      8:'Fetch events'
+    },
+    TracePC: {
+      1:'PeopleCode execution',
+      4:'Variable/field assignments and Store events',
+      8:'Fetch Field values',
+      16:'PeopleCode evaluator stack',
+      64:'Program starts',
+      128:'External functions',
+      256:'Internal functions',
+      512:'Function parameters in',
+      1024:'Function parameters out'
+    },
+    TraceAE: {
+      1:'Application Engine step sequence',
+      2:'Application Engine SQL',
+      4:'Dedicated temporary-table allocation',
+      8:'Temporary-table data',
+      128:'Statement timings to file',
+      256:'Method/built-in detail',
+      1024:'Timings to tables',
+      2048:'Optimizer trace to file',
+      4096:'Optimizer trace to tables',
+      8192:'Integration Broker transform',
+      16384:'SQL timings to PS_AE_TIMINGS_LG/DT'
+    }
+  };
+
+  var decodeBits = function(val, type) {
+    var n = Number(val);
+    if (!Number.isFinite(n) || n < 0) return [];
+    var defs = flagBits[type] || {};
+    return Object.keys(defs).map(Number).filter(function(bit) {
+      return (n & bit) === bit;
+    }).sort(function(a,b){ return a-b; });
+  };
+
+  var buildPopover = function(val, type) {
+    var ev = evidence[type];
+    var explicit = !!isExp[type];
+    var bits = decodeBits(val, type);
+    var html = '<div class="trace-flag-popover" role="tooltip">';
+    html += '<div class="tfp-title">' + escapeHtml(type + ' = ' + val + ' (0x' + Number(val).toString(16).toUpperCase() + ')') + '</div>';
+
+    if (explicit && ev) {
+      html += '<div class="tfp-row"><div class="tfp-k">Source</div><div class="tfp-v">Explicit value found in the original trace file.</div></div>';
+      html += '<div class="tfp-row"><div class="tfp-k">Trace line</div><div class="tfp-v">' + escapeHtml(String(ev.line)) + '</div></div>';
+      html += '<div class="tfp-row"><div class="tfp-k">Raw token</div><div class="tfp-v">' + escapeHtml(ev.rawToken) + '</div></div>';
+      html += '<div class="tfp-evidence">' + escapeHtml(ev.rawLine) + '</div>';
+    } else if (ev) {
+      html += '<div class="tfp-row"><div class="tfp-k">Source</div><div class="tfp-v">' + escapeHtml(ev.basis || 'Derived from the original trace file.') + '</div></div>';
+      html += '<div class="tfp-row"><div class="tfp-k">Why this value</div><div class="tfp-v">The analyzer set only the bits supported by trace events it actually parsed.</div></div>';
+      html += '<div class="tfp-evidence">' + escapeHtml((ev.lines || []).join('\n')) + '</div>';
+    } else {
+      html += '<div class="tfp-row"><div class="tfp-k">Source</div><div class="tfp-v">No trace-file evidence was retained for this value.</div></div>';
+    }
+
+    html += '<div class="tfp-row"><div class="tfp-k">Enabled bits</div><div class="tfp-v">';
+    if (bits.length) {
+      html += bits.map(function(bit) {
+        return '<div><span class="tfp-bit">' + bit + '</span> — ' + escapeHtml((flagBits[type] || {})[bit] || 'Defined trace option') + '</div>';
+      }).join('');
+    } else {
+      html += 'None';
+    }
+    html += '</div></div>';
+    html += '</div>';
+    return html;
+  };
 
   var formatFlag = function(val, type) {
     if (val === null || val === undefined) return '<span style="color:var(--dim)">Not detected</span>';
@@ -1871,7 +2385,10 @@ function renderTraceProfileCard(I) {
       ? ' <span style="font-size:9.5px;color:var(--green);font-weight:700">[Stamped]</span>' 
       : ' <span style="font-size:9.5px;color:var(--accent);font-weight:700">[Inferred]</span>';
     var hex = '0x' + Number(val).toString(16).toUpperCase();
-    return '<strong>' + val + '</strong> (' + hex + ')' + tag;
+    return '<span class="trace-flag-value" tabindex="0" aria-label="' + escapeHtml(type + ' value ' + val + ', hover for trace evidence') + '">' +
+      '<strong>' + escapeHtml(String(val)) + '</strong> (' + hex + ')' + tag +
+      buildPopover(val, type) +
+      '</span>';
   };
 
   [
@@ -1898,8 +2415,20 @@ function renderTraceProfileCard(I) {
   });
 
   mb.appendChild(mg);
+  bindTraceFlagPopovers(meta);
   return meta;
 }
+
+
+(function(){
+  function handleViewportChange(){
+    // Close synchronously so a popup cannot remain visible for a frame after
+    // scrolling or resizing a workspace.
+    closeTransientPopovers();
+  }
+  window.addEventListener('scroll', handleViewportChange, true);
+  window.addEventListener('resize', handleViewportChange, true);
+})();
 
 // ── Transaction & Boundary Analysis ───────────────────────────────
 function collectTransactionMarkers(lines){
@@ -1947,12 +2476,112 @@ function extractSQLStructure(sql){
 
 function improveSQLMetadata(){(G.sql||[]).forEach(function(s){var x=extractSQLStructure(s.text);if(x.tables.length)s.tables=x.tables;if(x.where)s.where=x.where;s.tokenCount=x.tokens.length;});}
 
+function normalizeVariableValue(value) {
+  var s = decodeHtmlEntities(value == null ? '' : String(value)).trim();
+  if (s.length >= 2 && s.charAt(0) === "'" && s.charAt(s.length - 1) === "'") s = s.slice(1, -1).replace(/''/g, "'");
+  return s;
+}
+
+// Tree-descent replacement for the previous O(events * allCalls) linear scan.
+// G.allCalls can run into the thousands on a busy AE/online trace, and this lookup used to
+// run once per variable event (up to 60,000 events) — a quadratic blowup on the same class
+// of problem already fixed once for Compare Trace's diff engine, but never applied here.
+// allCalls already exists as a proper tree (execPath roots + call.children), built by a
+// single forward scan per execution context, so children arrays are always sorted by
+// startLine already. G.execPath itself is a straight concatenation of each context's root
+// list (see ExecProc.prototype.done), so when a trace contains multiple interleaved
+// contexts the roots are NOT globally sorted by line — we defensively sort a copy of just
+// the (typically much smaller) root list once per parse rather than assume order.
+function findCallContainingLine(list, line) {
+  if (!list || !list.length) return null;
+  var lo = 0, hi = list.length - 1, candidateIdx = -1;
+  while (lo <= hi) {
+    var mid = (lo + hi) >> 1;
+    if ((Number(list[mid].startLine) || 0) <= line) { candidateIdx = mid; lo = mid + 1; }
+    else hi = mid - 1;
+  }
+  if (candidateIdx === -1) return null;
+  var c = list[candidateIdx];
+  var start = Number(c.startLine) || 0, end = Number(c.stopLine) || start;
+  if (line < start || line > Math.max(end, start)) return null;
+  return findCallContainingLine(c.children, line) || c;
+}
+
+// Nearest enclosing PeopleCode function/event for a given call node. Used to keep bare
+// &Variable correlation scoped to the function it actually occurred in — PeopleCode reuses
+// generic Local variable names (&i, &j, &SAVE) constantly across unrelated functions, and
+// without this qualifier two unrelated same-named locals get chained together as if one
+// were "changed into" the other.
+function nearestFunctionScope(c) {
+  while (c) {
+    if (c.type === 'NORMAL' || c.type === 'EXTERNAL') return c.fn || '';
+    c = c.parent;
+  }
+  return '';
+}
+
+function enrichVariableFlow() {
+  var events = G.varEvents || [], lastByVar = Object.create(null);
+  var roots = (G.execPath || []).slice().sort(function(a, b) {
+    return (Number(a.startLine) || 0) - (Number(b.startLine) || 0);
+  });
+  // G.varEvents is already produced in ascending trace-line order (a single forward pass
+  // over the file), so no extra sort is needed here to preserve chronological correlation.
+  events.forEach(function(ev) {
+    var c = findCallContainingLine(roots, ev.line || 0);
+    if (c) {
+      ev.context = c.ctxId || '';
+      ev.callType = c.type || '';
+      ev.callLine = c.startLine || 0;
+      ev.callEndLine = c.stopLine || 0;
+      ev.callDepth = Number(c.indent) || 0;
+      ev.callName = c.fn || '';
+      ev.aeStep = c.aeProgram ? [c.aeProgram, c.aeSection, c.aeStep].filter(Boolean).join('.') : '';
+    }
+    var isLocalVar = (ev.type === 'ASSIGN' || ev.type === 'COMPOUND_ASSIGN');
+    var scope = isLocalVar ? nearestFunctionScope(c) : '';
+    var key = (ev.context ? ev.context + '|' : '__NOCTX__|') + (scope ? scope + '|' : '') + String(ev.variable || '').toLowerCase();
+    var prev = lastByVar[key];
+    if (prev) {
+      ev.previousValue = prev.value;
+      ev.previousLine = prev.line;
+      ev.changeType = normalizeVariableValue(prev.value) === normalizeVariableValue(ev.value) ? 'UNCHANGED' : 'CHANGED';
+    }
+    lastByVar[key] = ev;
+  });
+}
+
 function correlateVariablesToSQL(){
   G.variableSQLLinks=[];
-  var vars=G.varEvents||[];
-  (G.sql||[]).forEach(function(s){var at=s.executeLine||s.lineNumber||0,cands=vars.filter(function(v){return(v.line||0)<=at&&at-(v.line||0)<=40;}),links=[];
-    (s.curB||[]).forEach(function(b){var val=decodeHtmlEntities(b.val==null?'':b.val),best=null,bd=Infinity;cands.forEach(function(v){var vv=decodeHtmlEntities(v.value==null?'':v.value);if(vv===val||(val&&vv&&vv.indexOf(val)>=0)||(vv&&val&&val.indexOf(vv)>=0)){var d=at-(v.line||0);if(d<bd){bd=d;best=v;}}});if(best)links.push({bindIndex:b.idx,variable:best.variable,value:best.value,line:best.line,distance:bd,confidence:bd<=8?'HIGH':bd<=20?'MEDIUM':'LOW'});});
-    if(links.length){s.variableLinks=links;links.forEach(function(l){var v=cands.filter(function(x){return x.line===l.line&&x.variable===l.variable;})[0];if(v){v.sqlLinks=v.sqlLinks||[];v.sqlLinks.push(s);}});G.variableSQLLinks.push({sql:s,links:links});}
+  var vars=G.varEvents||[], byValue=Object.create(null);
+  vars.forEach(function(v){
+    var key=normalizeVariableValue(v.value);
+    if(!key) return;
+    if(!byValue[key]) byValue[key]=[];
+    byValue[key].push(v);
+  });
+  (G.sql||[]).forEach(function(s){
+    var at=s.executeLine||s.lineNumber||0, maxWindow=60, links=[];
+    var binds=Array.isArray(s.curB)?s.curB:[], sqlCtx=s.parentCall&&s.parentCall.ctxId?s.parentCall.ctxId:'';
+    binds.forEach(function(b){
+      var target=normalizeVariableValue(b.val), candidates=byValue[target]||[], best=null, bestScore=-Infinity;
+      candidates.forEach(function(v){
+        var line=Number(v.line)||0, dist=at-line;
+        if(line>at || dist<0 || dist>maxWindow) return;
+        var score=100-dist;
+        if(sqlCtx && v.context) score += (v.context===sqlCtx ? 50 : -35);
+        if(v.type==='ASSIGN' || v.type==='FETCH' || v.type==='STORE') score+=5;
+        if(v.type==='COMPOUND_ASSIGN' || v.type==='FIELD_COMPOUND_ASSIGN') score-=2;
+        if(score>bestScore){bestScore=score;best={event:v,distance:dist};}
+      });
+      if(best){
+        var confidence=bestScore>=145?'HIGH':bestScore>=100?'MEDIUM':'LOW';
+        links.push({bindIndex:b.idx,variable:best.event.variable,value:best.event.value,line:best.event.line,distance:best.distance,confidence:confidence,match:'EXACT_VALUE',contextMatch:!!(sqlCtx&&best.event.context===sqlCtx)});
+        best.event.sqlLinks=best.event.sqlLinks||[];
+        if(best.event.sqlLinks.indexOf(s)<0) best.event.sqlLinks.push(s);
+      }
+    });
+    if(links.length){s.variableLinks=links;G.variableSQLLinks.push({sql:s,links:links});}
   });
 }
 
@@ -2308,7 +2937,7 @@ function showMain() {
   document.getElementById('main').style.display = 'flex';
   document.getElementById('homeFooter').style.display = 'none';
   document.getElementById('bg-sql').textContent = G.sql.length;
-  document.getElementById('bg-st').textContent = G.stacks.length + G.valueIssues.length + G.vars.length;
+  document.getElementById('bg-st').textContent = buildDiagnosticItems().filter(function(x){return x.severity==='critical' || x.severity==='warning';}).length;
   document.getElementById('bg-var').textContent = G.varEvents.length;
 
   renderDashboard();
@@ -2330,6 +2959,7 @@ function gTab(tab) {
     if (p) { p.classList.toggle('act', t === tab); p.style.display = t === tab ? 'flex' : 'none'; }
   });
   document.getElementById('stabs').style.display = tab === 'sql' ? 'flex' : 'none';
+  closeTransientPopovers();
   closeDrawer();
 }
 
@@ -2364,9 +2994,24 @@ function renderDashboard() {
     '<span class="rca-cov-badge ' + (comp.hasBinds ? 'ok' : 'miss') + '">Binds ' + (comp.hasBinds ? '&#10003;' : '&#8212;') + '</span>' +
     '<span class="rca-cov-badge ' + (comp.hasTimings ? 'ok' : 'miss') + '">Timings ' + (comp.hasTimings ? '&#10003;' : '&#8212;') + '</span>' +
     '<span class="rca-cov-badge ' + (comp.hasPC ? 'ok' : 'miss') + '">PeopleCode ' + (comp.hasPC ? '&#10003;' : '&#8212;') + '</span>' +
-    '<span class="pill ' + (comp.score >= 75 ? 'pill-ok' : comp.score >= 50 ? 'pill-warn' : 'pill-bad') + '" style="margin-left:4px">Coverage: ' + (comp.score || 0) + '%</span>';
+    '<span class="rca-coverage-trigger" tabindex="0" aria-label="Coverage ' + (comp.score || 0) + ' percent, show calculation details">' +
+      '<span class="pill ' + (comp.score >= 75 ? 'pill-ok' : comp.score >= 50 ? 'pill-warn' : 'pill-bad') + '" style="margin-left:4px">Coverage: ' + (comp.score || 0) + '%</span>' +
+      '<span class="rca-coverage-popover" role="tooltip">' +
+        '<div class="tcp-title">RCA Coverage — ' + (comp.score || 0) + '%</div>' +
+        '<div class="tcp-note">Coverage measures how much diagnostic evidence is available to support Root Cause Analysis. It is an evidence-availability score, not a confidence score and not a measure of application correctness.</div>' +
+        '<div class="tcp-formula">Score = enabled evidence categories × 15 points, with Errors worth 10 points; capped at 100.</div>' +
+        '<div class="tcp-row"><span>SQL statements</span><span class="tcp-weight">+15 ' + (comp.hasSql ? '<span class="tcp-status">✓</span>' : '<span class="tcp-status miss">—</span>') + '</span></div>' +
+        '<div class="tcp-row"><span>Bind variables</span><span class="tcp-weight">+15 ' + (comp.hasBinds ? '<span class="tcp-status">✓</span>' : '<span class="tcp-status miss">—</span>') + '</span></div>' +
+        '<div class="tcp-row"><span>Timing data</span><span class="tcp-weight">+15 ' + (comp.hasTimings ? '<span class="tcp-status">✓</span>' : '<span class="tcp-status miss">—</span>') + '</span></div>' +
+        '<div class="tcp-row"><span>PeopleCode calls</span><span class="tcp-weight">+15 ' + (comp.hasPC ? '<span class="tcp-status">✓</span>' : '<span class="tcp-status miss">—</span>') + '</span></div>' +
+        '<div class="tcp-row"><span>Database/error evidence</span><span class="tcp-weight">+10 ' + (comp.hasErrors ? '<span class="tcp-status">✓</span>' : '<span class="tcp-status miss">—</span>') + '</span></div>' +
+        '<div class="tcp-row"><span>Cursor data</span><span class="tcp-weight">+15 ' + (comp.hasCursorData ? '<span class="tcp-status">✓</span>' : '<span class="tcp-status miss">—</span>') + '</span></div>' +
+        '<div class="tcp-row"><span>Fetch data</span><span class="tcp-weight">+15 ' + (comp.hasFetchData ? '<span class="tcp-status">✓</span>' : '<span class="tcp-status miss">—</span>') + '</span></div>' +
+      '</span>' +
+    '</span>';
   rcaHead.appendChild(covWrap);
   rcaCard.appendChild(rcaHead);
+  bindCoveragePopover(covWrap.querySelector('.rca-coverage-trigger'));
 
   var rcaBody = document.createElement('div'); rcaBody.className = 'card-body';
   var items = rca.items || [];
@@ -2547,7 +3192,20 @@ function colsIndex(c) {
 function renderExec() {
   var c = document.getElementById('epc'), tb = document.getElementById('exec-toolbar'); c.innerHTML = ''; tb.innerHTML = '';
   var execs = Array.isArray(G.execPath) ? G.execPath : []; var I = G.insights || {};
-  [['Contexts', I.contexts || 0], ['Nodes', G.allCalls.length], ['Max Depth', G.maxDepth], ['Exceptions', G._pex || 0]].forEach(function(x) { var s = document.createElement('span'); s.className = 'exec-stat'; s.textContent = x[0] + ': ' + x[1]; tb.appendChild(s); });
+  var execStatInfo = [
+    ['Contexts', I.contexts || 0, 'Unique execution contexts identified in the trace. Useful for seeing how many separate runtime contexts were parsed.'],
+    ['Nodes', G.allCalls.length, 'Total execution nodes parsed into the tree, including PeopleCode calls, external calls, App Engine steps, and SQL nodes.'],
+    ['Max Depth', G.maxDepth, 'Deepest nested execution level detected. Higher depth can indicate complex call chains and is useful when tracing recursion or nested processing.'],
+    ['Exceptions', G._pex || 0, 'PeopleCode exception events detected in the trace. A non-zero value is a direct signal to inspect the related execution node and stack details.']
+  ];
+  execStatInfo.forEach(function(x) {
+    var wrap = document.createElement('span'); wrap.className = 'exec-stat-trigger'; wrap.tabIndex = 0;
+    wrap.setAttribute('aria-label', x[0] + ': ' + x[1] + '. Show debugging information.');
+    wrap.innerHTML = '<span class="exec-stat">' + escapeHtml(x[0]) + ': ' + escapeHtml(String(x[1])) + '</span>' +
+      '<span class="exec-stat-popover" role="tooltip"><div class="esp-title">' + escapeHtml(x[0]) + '</div><div class="esp-note">' + escapeHtml(x[2]) + '</div></span>';
+    tb.appendChild(wrap);
+  });
+  bindExecStatPopovers(tb);
   var sp = document.createElement('span'); sp.className = 'spacer'; tb.appendChild(sp);
   var ex = document.createElement('button'); ex.className = 'btn-sm'; ex.textContent = 'Expand All'; ex.onclick = function() { document.querySelectorAll('#epc .collapsed').forEach(function(n) { n.classList.remove('collapsed'); var t = n.querySelector(':scope > .er .etog'); if (t) t.textContent = '▼'; }); }; tb.appendChild(ex);
   var co = document.createElement('button'); co.className = 'btn-sm'; co.textContent = 'Collapse All'; co.onclick = function() { document.querySelectorAll('#epc .en').forEach(function(n) { if (n.querySelector(':scope > .ech')) { n.classList.add('collapsed'); var t = n.querySelector(':scope > .er .etog'); if (t) t.textContent = '▶'; } }); }; tb.appendChild(co);
@@ -2573,37 +3231,105 @@ function renderCall(call, depth) {
 }
 
 // ── Diagnostics & Exceptions Tab ──────────────────────────────────
-function renderDiagnostics() {
-  var sl = document.getElementById('stl'); sl.innerHTML = '';
-  var stacks = G.stacks || [], valIssues = G.valueIssues || [], vars = G.vars || [];
-  if (!stacks.length && !valIssues.length && !vars.length) {
-    sl.innerHTML = '<div class="es"><div><div class="ei">&#10003;</div>No exceptions, stack traces, or variable issues identified.</div></div>';
-    return;
+function diagnosticCategory(item) {
+  var t = String(item.type || '').toUpperCase();
+  if (/SQL_ERROR|FATAL_EXCEPTION|AE_ABNORMAL_TERMINATION/.test(t)) return 'ERRORS';
+  if (/SQL_NPLUS1|UNCONSTRAINED_SQL|PEOPLECODE_HOTSPOT|SLOW_SQL|HIGH_FETCH|LOOP|PERFORMANCE/.test(t)) return 'PERFORMANCE';
+  if (/UNINIT|NULL_|EMPTY_FETCH|OVERFLOW|BUFFER/.test(t)) return 'DATA';
+  if (/PEOPLECODE|EXCEPTION|STACK/.test(t)) return 'PEOPLECODE';
+  if (/TRACE_FLAG/.test(t)) return 'TRACE';
+  return 'ALL';
+}
+function buildDiagnosticItems() {
+  var out = [], seen = Object.create(null);
+  function add(x) {
+    if (!x) return;
+    x.category = x.category || diagnosticCategory(x);
+    // NOTE: value issues, stack exceptions, and buffer snapshots do not set .line/.lineNumber
+    // or .sql on the diagnostic wrapper itself — only inside evidenceLines. Without this
+    // fallback, two distinct occurrences of the same type+title (e.g. a NULL_FETCH on the
+    // same field at two different trace lines) collapse to the same key and the second
+    // occurrence is silently dropped, even though it is a genuinely separate finding.
+    var lineKey = x.line || x.lineNumber || (x.sql && x.sql.lineNumber) || (x.evidenceLines && x.evidenceLines[0]) || '';
+    var key = x.type + '|' + lineKey + '|' + (x.title || '');
+    if (seen[key]) return;
+    seen[key] = 1; out.push(x);
   }
-  stacks.forEach(function(st) {
-    var ste = document.createElement('div'); ste.className = 'ste';
-    ste.onclick = function() { viewStack(st); };
-    ste.innerHTML = '<div class="stm">&#9888; ' + escapeHtml(st.message || 'Exception') + '</div>' +
-      (st.offender ? '<div class="sto">Offender: ' + escapeHtml(st.offender) + '</div>' : '') +
-      '<div class="stn">Line ' + (st.lineNumber || '—') + ' • ' + ((st.stack || []).length) + ' stack frames</div>';
-    sl.appendChild(ste);
+  (G.rca && G.rca.items || []).forEach(function(x){
+    add({severity:x.severity||'info',type:x.type,title:x.title,symptom:x.symptom,fix:x.fix,evidenceLines:x.evidenceLines||[],sql:x.sql,confidence:x.confidence,category:diagnosticCategory(x)});
   });
-  valIssues.forEach(function(v) {
-    var ste = document.createElement('div'); ste.className = 'ste warn';
-    ste.onclick = function() { viewValueIssue(v); };
-    ste.innerHTML = '<div class="stm">&#9888; ' + escapeHtml(v.type) + ': ' + escapeHtml(v.variable) + '</div>' +
-      '<div class="sto">' + escapeHtml(v.desc) + '</div>' +
-      '<div class="stn">Line ' + v.lineNumber + (v.location ? ' • ' + escapeHtml(v.location) : '') + '</div>';
-    sl.appendChild(ste);
+  (G.insights && G.insights.slow || []).slice(0,30).forEach(function(s){
+    add({severity:s.dur>=5?'critical':'warning',type:'SLOW_SQL',title:'Slow SQL: '+(s.type||'SQL'),symptom:(s.type||'SQL')+' at trace line '+s.lineNumber+' took '+fmtSec(s.dur)+'.'+(s.tables&&s.tables.length?' Tables: '+s.tables.join(', ')+'.':''),fix:'Open the SQL details and review predicates, join strategy, repeated execution, bind selectivity, and fetch volume.',evidenceLines:[s.lineNumber,s.executeLine,s.errorLine].filter(Boolean),sql:s,category:'PERFORMANCE'});
   });
-  vars.forEach(function(vb) {
-    var ste = document.createElement('div'); ste.className = 'ste warn';
-    ste.onclick = function() { viewBufferVariables(vb); };
-    ste.innerHTML = '<div class="stm" style="color:var(--accent)">&#128203; Buffer Snapshot: ' + escapeHtml(vb.type) + '</div>' +
-      '<div class="sto" style="color:var(--dim)">' + vb.vars.length + ' variables captured in buffer hierarchy</div>' +
-      '<div class="stn">Line ' + vb.startLine + (vb.ctx ? ' • ' + escapeHtml(vb.ctx) : '') + '</div>';
-    sl.appendChild(ste);
+  (G.insights && G.insights.highFetch || []).slice(0,20).forEach(function(s){
+    add({severity:'warning',type:'HIGH_FETCH',title:'High Fetch Volume',symptom:'SQL at line '+s.lineNumber+' performed '+s.fc+' fetch calls and consumed '+fmtSec(s.dur)+'.',fix:'Check whether the cursor returns more rows than expected and whether application code is fetching row-by-row unnecessarily.',evidenceLines:[s.lineNumber],sql:s,category:'PERFORMANCE'});
   });
+  (G.valueIssues || []).forEach(function(v){
+    add({severity:v.type==='OVERFLOW'?'critical':'warning',type:v.type,title:v.type.replace(/_/g,' ')+': '+v.variable,symptom:v.desc,fix:v.fix,evidenceLines:[v.lineNumber],valueIssue:v,category:'DATA'});
+  });
+  (G.stacks || []).forEach(function(st){
+    add({severity:'critical',type:'STACK_EXCEPTION',title:'PeopleCode Exception: '+(st.message||'Exception'),symptom:(st.offender?'Offender: '+st.offender+'. ':'')+'Exception at trace line '+st.lineNumber+' with '+((st.stack||[]).length)+' stack frame(s).',fix:'Open the diagnostic and start with the first application-owned frame in the stack; then inspect the variable/buffer state and SQL immediately around that line.',evidenceLines:[st.lineNumber],stack:st,category:'PEOPLECODE'});
+  });
+  (G.vars || []).forEach(function(vb){
+    add({severity:'info',type:'BUFFER_SNAPSHOT',title:'PeopleCode Buffer Snapshot: '+vb.type,symptom:vb.vars.length+' buffer variable(s) captured at line '+vb.startLine+'.',fix:'Use this only when investigating buffer state or serialization/deserialization problems; it is not itself an error.',evidenceLines:[vb.startLine],buffer:vb,category:'DATA'});
+  });
+  var rank={critical:0,warning:1,info:2};
+  out.sort(function(a,b){
+    var r=(rank[a.severity]??2)-(rank[b.severity]??2); if(r) return r;
+    var ac=(a.confidence||0),bc=(b.confidence||0); if(ac!==bc)return bc-ac;
+    var ad=a.sql&&a.sql.dur||0,bd=b.sql&&b.sql.dur||0; if(ad!==bd)return bd-ad;
+    return (a.evidenceLines&&a.evidenceLines[0]||0)-(b.evidenceLines&&b.evidenceLines[0]||0);
+  });
+  return out;
+}
+function setDiagnosticFilter(filter){ diagActiveFilter=filter||'ALL'; renderDiagnostics(); }
+function renderDiagnostics(){
+  var sl=document.getElementById('stl'); if(!sl)return; sl.innerHTML='';
+  var items=buildDiagnosticItems(), active=diagActiveFilter||'ALL';
+  var search=(document.getElementById('diagSearch')?.value||'').trim().toLowerCase();
+  var counts={ALL:items.length,ERRORS:0,PERFORMANCE:0,PEOPLECODE:0,DATA:0,TRACE:0};
+  items.forEach(function(x){if(counts[x.category]!==undefined)counts[x.category]++;});
+  var labels=[['ALL','All'],['ERRORS','Errors'],['PERFORMANCE','Performance'],['PEOPLECODE','PeopleCode'],['DATA','Data/Buffer'],['TRACE','Trace setup']];
+  var tb=document.createElement('div');tb.className='diag-toolbar';
+  var inp=document.createElement('input');inp.id='diagSearch';inp.className='diag-search';inp.placeholder='Search error, SQL, program, table, line…';inp.value=search;inp.oninput=function(){renderDiagnostics();};tb.appendChild(inp);
+  labels.forEach(function(x){var b=document.createElement('button');b.type='button';b.className='diag-filter'+(active===x[0]?' active':'');b.textContent=x[1]+' '+counts[x[0]];b.onclick=function(){setDiagnosticFilter(x[0]);};tb.appendChild(b);});
+  if(active!=='ALL'){var b=document.createElement('button');b.type='button';b.className='diag-filter';b.textContent='Clear filter';b.onclick=function(){setDiagnosticFilter('ALL');};tb.appendChild(b);}
+  var ct=document.createElement('span');ct.className='diag-count';ct.textContent='Actionable findings';tb.appendChild(ct);sl.appendChild(tb);
+  var note=document.createElement('div');note.className='diag-note';note.textContent='Prioritized for root-cause analysis. Click a finding for evidence, context, and the shortest useful debugging path.';sl.appendChild(note);
+  var list=items.filter(function(x){
+    if(active!=='ALL' && x.category!==active)return false;
+    if(!search)return true;
+    var hay=[x.title,x.symptom,x.fix,x.type,x.sql&&x.sql.text,x.sql&&x.sql.tables&&x.sql.tables.join(' '),x.stack&&x.stack.message,x.stack&&x.stack.offender].join(' ').toLowerCase();
+    return hay.indexOf(search)>=0;
+  });
+  if(!list.length){sl.insertAdjacentHTML('beforeend','<div class="diag-empty">No findings match the selected filter/search.<br><span style="font-size:10px">Choose another filter or clear the search. Filters remain available even when the result is zero.</span></div>');return;}
+  list.slice(0,100).forEach(function(x){
+    var card=document.createElement('div');card.className='diag-card '+(x.severity||'info')+(x.category==='PERFORMANCE'?' performance':'');
+    card.onclick=function(){viewDiagnostic(x);};
+    var ev=x.evidenceLines&&x.evidenceLines.length?'Evidence line(s): '+x.evidenceLines.slice(0,5).join(', '):'';
+    card.innerHTML='<div class="diag-card-head"><div class="diag-title">'+escapeHtml(x.title||x.type)+'</div><span class="diag-sev">'+escapeHtml(x.severity||'info')+'</span></div>'+
+      '<div class="diag-symptom">'+escapeHtml(x.symptom||'')+'</div>'+
+      '<div class="diag-action"><strong>Next:</strong> '+escapeHtml(x.fix||'Open details and inspect the trace evidence.')+'</div>'+
+      '<div class="diag-meta"><span>'+escapeHtml(x.category||'ALL')+'</span>'+(x.confidence?' <span>Evidence '+x.confidence+'%</span>':'')+(ev?' <span>'+escapeHtml(ev)+'</span>':'')+(x.sql?' <span>'+escapeHtml(fmtSec(x.sql.dur||0))+'</span>':'')+'</div>';
+    sl.appendChild(card);
+  });
+  if(list.length>100)sl.insertAdjacentHTML('beforeend','<div class="diag-note">Displaying first 100 of '+list.length+' matching findings. Use search or a category filter to narrow the list.</div>');
+}
+function viewDiagnostic(x){
+  var h='<span class="lbl">'+escapeHtml(x.category||'Diagnostic')+'</span>'+escapeHtml(x.title||x.type)+'<br>';
+  if(x.confidence)h+='Evidence score: '+x.confidence+'%<br>';
+  h+='<br><span class="lbl">What was observed</span>'+escapeHtml(x.symptom||'')+'<br><br>';
+  h+='<span class="lbl">Recommended debugging path</span>'+escapeHtml(x.fix||'Inspect the related trace evidence and execution context.')+'<br>';
+  if(x.sql){h+='<br><span class="lbl">SQL Evidence</span>Line '+x.sql.lineNumber+' • '+escapeHtml(x.sql.type||'SQL')+' • '+fmtSec(x.sql.dur||0)+'<pre class="sql-block">'+highlightSQL(substitutedSQL(x.sql))+'</pre>';
+    if(x.sql.parentCall)h+='<span class="lbl">PeopleCode / AE Context</span>'+escapeHtml(x.sql.parentCall.fn||'—')+'<br>';
+    if(x.sql.tables&&x.sql.tables.length)h+='<span class="lbl">Tables</span>'+escapeHtml(x.sql.tables.join(', '))+'<br>';
+    if(x.sql.where)h+='<span class="lbl">WHERE</span><pre class="sql-block">'+highlightSQL(x.sql.where)+'</pre>';
+  }
+  if(x.stack){h+='<br><span class="lbl">Exception</span>'+escapeHtml(x.stack.message||'Exception')+'<br>Offender: '+escapeHtml(x.stack.offender||'—')+'<br><span class="lbl">Call Stack</span><br>'+(x.stack.stack||[]).map(function(f,i){return (i+1)+'. '+escapeHtml(f);}).join('<br>');}
+  if(x.valueIssue)h+='<br><span class="lbl">Target</span>'+escapeHtml(x.valueIssue.variable||'—');
+  if(x.buffer)h+='<br><span class="lbl">Buffer Snapshot</span>'+escapeHtml(x.buffer.type||'—')+' • '+x.buffer.vars.length+' variables';
+  if(x.evidenceLines&&x.evidenceLines.length)h+='<br><span class="lbl">Trace Evidence</span>'+x.evidenceLines.slice(0,10).map(function(n){return 'Line '+n;}).join(' • ')+'<br><button class="copy-btn" onclick="viewEvidence('+JSON.stringify(x.evidenceLines.slice(0,10)).replace(/</g,'\\u003c')+')">Open evidence</button>';
+  openDrawer('Diagnostic Details',h);
 }
 
 // ── Variable Flow Timeline UI ─────────────────────────────────────
@@ -2613,46 +3339,150 @@ function initVariableFlowUI() {
   keys.slice(0, 1500).forEach(function(k) {
     var opt = document.createElement('option'); opt.value = k; dl.appendChild(opt);
   });
-  document.getElementById('varStatsText').textContent = G.varEvents.length.toLocaleString() + ' total events tracked';
+  document.getElementById('varStatsText').textContent = (G.varEvents.length || 0).toLocaleString() + ' total events tracked' + (G.varFlowTruncated ? ' • capped at 60,000' : '');
   filterVariables();
+}
+
+function variableDisplayValue(v) {
+  var s = String(v == null ? '' : v);
+  return s.length > 1000 ? s.slice(0, 1000) + ' …' : s;
+}
+
+function getVariableFilterCounts() {
+  var counts = {EVENTS:0, CHANGED:0, FETCH:0, STORE:0, ASSIGN:0, SQL:0};
+  (G.varEvents || []).forEach(function(e) {
+    counts.EVENTS++;
+    if (e.changeType === 'CHANGED') counts.CHANGED++;
+    if (e.type === 'FETCH') counts.FETCH++;
+    if (e.type === 'STORE') counts.STORE++;
+    if (e.type === 'ASSIGN' || e.type === 'COMPOUND_ASSIGN' || e.type === 'FIELD_ASSIGN' || e.type === 'FIELD_COMPOUND_ASSIGN') counts.ASSIGN++;
+    if (e.sqlLinks && e.sqlLinks.length) counts.SQL++;
+  });
+  return counts;
+}
+
+function setVariableFilter(filter) {
+  G.varActiveFilter = filter || 'ALL';
+  filterVariables();
+}
+
+function renderVariableSummary(list) {
+  var counts = getVariableFilterCounts();
+  var active = G.varActiveFilter || 'ALL';
+  var labels = [
+    ['ALL','Events',counts.EVENTS],
+    ['CHANGED','Changed',counts.CHANGED],
+    ['FETCH','Fetch',counts.FETCH],
+    ['STORE','Store',counts.STORE],
+    ['ASSIGN','Assignments',counts.ASSIGN],
+    ['SQL','SQL-linked',counts.SQL]
+  ];
+  var html = '<div class="var-summary">';
+  labels.forEach(function(x) {
+    html += '<button type="button" class="var-summary-item' + (active === x[0] ? ' active' : '') + '" data-var-filter="' + x[0] + '" onclick="setVariableFilter(\'' + x[0] + '\')" title="Show only ' + x[1] + ' variable-flow events">' + x[1] + ': ' + x[2].toLocaleString() + '</button>';
+  });
+  if (active !== 'ALL') html += '<button type="button" class="var-summary-item" onclick="setVariableFilter(\'ALL\')" title="Clear variable-flow filter">Clear filter</button>';
+  if (G.varFlowTruncated) html += '<span class="var-summary-item">Capture capped: first 60,000 events</span>';
+  if (active !== 'ALL' || (document.getElementById('varSearchInput') && document.getElementById('varSearchInput').value.trim())) {
+    html += '<span class="var-filter-status">Showing ' + list.length.toLocaleString() + ' matching events</span>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function getVariableFilteredEvents() {
+  var filter = G.varActiveFilter || 'ALL';
+  var events = G.varEvents || [];
+  if (filter === 'CHANGED') return events.filter(function(e){ return e.changeType === 'CHANGED'; });
+  if (filter === 'FETCH') return events.filter(function(e){ return e.type === 'FETCH'; });
+  if (filter === 'STORE') return events.filter(function(e){ return e.type === 'STORE'; });
+  if (filter === 'ASSIGN') return events.filter(function(e){ return e.type === 'ASSIGN' || e.type === 'COMPOUND_ASSIGN' || e.type === 'FIELD_ASSIGN' || e.type === 'FIELD_COMPOUND_ASSIGN'; });
+  if (filter === 'SQL') return events.filter(function(e){ return e.sqlLinks && e.sqlLinks.length; });
+  return events.slice();
 }
 
 function filterVariables() {
   var term = (document.getElementById('varSearchInput').value || '').trim().toLowerCase();
   var c = document.getElementById('varTimelineContainer'); c.innerHTML = '';
   if (!G.varEvents.length) {
-    c.innerHTML = '<div class="es"><div><div class="ei">&#128203;</div>No variable assignment or field events were captured.</div></div>';
+    c.innerHTML = '<div class="es"><div><div class="ei">&#128203;</div>No variable assignment or field events were captured. This usually means the trace did not include PeopleCode variable/field value tracing.</div></div>';
     return;
   }
-  var list = [];
-  if (!term) {
-    list = G.varEvents.slice(0, 150);
-  } else {
-    var indices = G.varMap[term];
-    if (indices) {
-      list = indices.map(function(i) { return G.varEvents[i]; });
+
+  var list = getVariableFilteredEvents();
+  if (term) {
+    var exact = G.varMap[term];
+    if (exact && (G.varActiveFilter || 'ALL') === 'ALL') {
+      list = exact.map(function(i){ return G.varEvents[i]; });
     } else {
-      list = G.varEvents.filter(function(e) { return e.variable.toLowerCase().includes(term) || (e.value && e.value.toLowerCase().includes(term)); }).slice(0, 250);
+      list = list.filter(function(e){
+        return String(e.variable || '').toLowerCase().includes(term) || String(e.value || '').toLowerCase().includes(term);
+      });
     }
   }
+
   if (!list.length) {
-    c.innerHTML = '<div class="table-empty">No variable events match "' + escapeHtml(term) + '".</div>';
+    // Keep the filter bar visible even when the selected filter has zero
+    // matches. This is important for filters such as Assignments: 0:
+    // the user must still be able to switch to Fetch/Store/Changed/etc.
+    c.insertAdjacentHTML('beforeend', renderVariableSummary([]));
+    var filterName = (G.varActiveFilter || 'ALL') === 'ALL' ? '' : ' for ' + String(G.varActiveFilter || '').toLowerCase();
+    c.insertAdjacentHTML('beforeend',
+      '<div class="var-summary-status">No variable events match the selected filter' +
+      filterName + (term ? ' and search "' + escapeHtml(term) + '"' : '') + '.</div>');
     return;
   }
-  list.forEach(function(ev) {
-    var card = document.createElement('div'); card.className = 'var-entry';
-    card.innerHTML = 
-      '<div class="var-entry-head">' +
-        '<span class="var-entry-title">' + escapeHtml(ev.type) + ' &bull; ' + escapeHtml(ev.variable) + '</span>' +
-        '<span class="var-entry-meta">Line ' + ev.line + '</span>' +
-      '</div>' +
-      '<div class="var-entry-val">' + escapeHtml(ev.value || '(empty)') + '</div>';
-    if(ev.sqlLinks && ev.sqlLinks.length){var vb=document.createElement('button');vb.className='btn-sm';vb.style.marginTop='5px';vb.textContent='View correlated SQL';vb.onclick=function(e){e.stopPropagation();viewSQL(ev.sqlLinks[0]);};card.appendChild(vb);}
+
+  var displayLimit = term ? 500 : 250;
+  var displayList = list.slice(0, displayLimit);
+  c.insertAdjacentHTML('beforeend', renderVariableSummary(displayList));
+  if (list.length > displayList.length) {
+    c.insertAdjacentHTML('beforeend', '<div class="var-filter-status">Displaying first ' + displayList.length.toLocaleString() + ' of ' + list.length.toLocaleString() + ' matching events. Use search to narrow the results.</div>');
+  }
+
+  displayList.forEach(function(ev) {
+    var card = document.createElement('div');
+    card.className = 'var-entry' + (ev.changeType === 'CHANGED' ? ' var-changed' : '');
+    card.onclick = function(){ viewVariableEvent(ev); };
+    var context = ev.aeStep ? 'AE ' + ev.aeStep : (ev.callName || ev.context ? (ev.callName || ev.context) : 'Execution context not correlated');
+    var change = '';
+    if(ev.previousValue !== null) change = '<div class="var-entry-change">Previous: ' + escapeHtml(variableDisplayValue(ev.previousValue)) + ' &nbsp;→&nbsp; ' + escapeHtml(ev.changeType) + '</div>';
+    var links = '<div class="var-entry-links"><span class="var-badge">' + escapeHtml(ev.type) + '</span>';
+    if(ev.operator && ev.operator !== '=') links += '<span class="var-badge">Operator ' + escapeHtml(ev.operator) + '</span>';
+    if(ev.previousLine) links += '<span class="var-badge">Previous line: ' + ev.previousLine + '</span>';
+    if(ev.sqlLinks && ev.sqlLinks.length) links += '<span class="var-badge">SQL links: ' + ev.sqlLinks.length + '</span>';
+    links += '</div>';
+    card.innerHTML = '<div class="var-entry-head"><span class="var-entry-title">' + escapeHtml(ev.type) + ' &bull; ' + escapeHtml(ev.variable) + '</span><span class="var-entry-meta">Trace line ' + ev.line + '</span></div>' +
+      '<div class="var-entry-context">' + escapeHtml(context) + (ev.callLine ? ' &bull; call line ' + ev.callLine : '') + '</div>' +
+      '<div class="var-entry-val">' + escapeHtml(variableDisplayValue(ev.value || '(empty)')) + '</div>' + change + links;
     c.appendChild(card);
   });
 }
 
+
 // ── Detail Drawer Views ───────────────────────────────────────────
+function viewVariableEvent(ev) {
+  var body = [];
+  body.push('<span class="lbl">Variable Event</span>' + escapeHtml(ev.type) + ' • Trace line ' + ev.line);
+  body.push('<br><span class="lbl">Variable / Field</span>' + escapeHtml(ev.variable));
+  body.push('<br><span class="lbl">Value</span><pre class="code-block">' + escapeHtml(ev.value || '(empty)') + '</pre>');
+  if(ev.operator) body.push('<span class="lbl">Assignment Operator</span>' + escapeHtml(ev.operator));
+  if(ev.previousValue !== null) body.push('<br><span class="lbl">Lifecycle Change</span>' + escapeHtml(ev.changeType) + '<br>Previous value: <span class="val">' + escapeHtml(ev.previousValue || '(empty)') + '</span>');
+  if(ev.callName) body.push('<br><span class="lbl">PeopleCode / Execution Context</span>' + escapeHtml(ev.callName) + ' • lines ' + ev.callLine + '–' + (ev.callEndLine || '—'));
+  if(ev.aeStep) body.push('<br><span class="lbl">Application Engine Step</span>' + escapeHtml(ev.aeStep));
+  if(ev.context) body.push('<br><span class="lbl">Trace Context</span>' + escapeHtml(ev.context));
+  if(ev.sqlLinks && ev.sqlLinks.length){
+    body.push('<br><span class="lbl">Correlated SQL (' + ev.sqlLinks.length + ')</span>');
+    ev.sqlLinks.slice(0,10).forEach(function(sql){ body.push('Line ' + sql.lineNumber + ' • ' + escapeHtml(sql.type || 'SQL') + ' • ' + fmtSec(sql.dur || 0) + ' • ' + escapeHtml((sql.text || '').slice(0,180)) + '<br>'); });
+    if(ev.sqlLinks.length>10) body.push('<span class="val">+' + (ev.sqlLinks.length-10) + ' additional SQL links</span>');
+  }
+  var idx=Number(ev.eventIndex)||0, lo=Math.max(0,idx-3), hi=Math.min((G.varEvents||[]).length,idx+4);
+  body.push('<br><span class="lbl">Nearby Variable Timeline</span>');
+  for(var i=lo;i<hi;i++){var n=G.varEvents[i];body.push((n===ev?'▶ ':'')+'Line '+n.line+' • '+escapeHtml(n.type)+' • '+escapeHtml(n.variable)+' = '+escapeHtml(variableDisplayValue(n.value))+'<br>');}
+  body.push('<br><span class="lbl">Trace Evidence</span><pre class="code-block">' + escapeHtml(ev.raw || '') + '</pre>');
+  openDrawer('Variable Flow Details', body.join('<br>'));
+}
+
 function openDrawer(t, h) { document.getElementById('drawerTitle').textContent = t; document.getElementById('drawerBody').innerHTML = h; document.getElementById('drawerBackdrop').classList.add('on'); document.getElementById('drawer').classList.add('open'); }
 function closeDrawer() { document.getElementById('drawerBackdrop').classList.remove('on'); document.getElementById('drawer').classList.remove('open'); }
 
@@ -2826,7 +3656,7 @@ function doSearch() {
 function closeSearch() { document.getElementById('sb').classList.remove('on'); document.getElementById('si').value = ''; doSearch(); }
 document.addEventListener('keydown', function(e) { 
   if ((e.ctrlKey || e.metaKey) && e.key === 'f' && curTab === 'sql') { e.preventDefault(); document.getElementById('sb').classList.add('on'); document.getElementById('si').focus(); } 
-  if (e.key === 'Escape') { closeHelpExplicit(); closeCompareModalExplicit(); }
+  if (e.key === 'Escape') { closeTransientPopovers(); closeHelpExplicit(); closeCompareModalExplicit(); }
 });
 
 // ── Modals & Export ───────────────────────────────────────────────
@@ -2850,13 +3680,66 @@ function goHome() {
   CompareState.result = null; CompareState.m1 = null; CompareState.m2 = null; CompareState.hideMatched = false;
 }
 
-function csvCell(v){return '"'+String(v==null?'':v).replace(/"/g,'""').replace(/\r?\n/g,' ')+'"';}
+function csvCell(v){
+  var s=String(v==null?'':v);
+  // Keep CSV Excel-safe while preserving the diagnostic text as much as possible.
+  if(/^[=+\-@]/.test(s))s="'"+s;
+  return '"'+s.replace(/"/g,'""').replace(/\r?\n/g,' ')+'"';
+}
+function csvBindRuns(sql){
+  var runs=Array.isArray(sql&&sql.runs)?sql.runs:[];
+  if(!runs.length && Array.isArray(sql&&sql.curB) && sql.curB.length) runs=[{line:sql.executeLine||sql.lineNumber,binds:sql.curB}];
+  return runs.map(function(run){
+    var binds=Array.isArray(run.binds)?run.binds:[];
+    if(!binds.length)return 'line '+(run.line||'—')+': <no binds>';
+    return 'line '+(run.line||'—')+': '+binds.map(function(b){return '#'+b.idx+'='+String(b.val==null?'NULL':decodeHtmlEntities(b.val));}).join(' | ');
+  }).join(' ; ');
+}
+function csvDiagnosticFlags(s,f){
+  var flags=[];
+  var dur=Number(s&&s.dur)||0;
+  var n1=Number(f&&f.n1Score)||0;
+  if(s&&s.isErr)flags.push('ERROR');
+  if(dur>=slowSec)flags.push('SLOW');
+  if(s&&s.type==='SELECT' && !(s.where||'').trim())flags.push('NO_WHERE');
+  if(f&&Number(f.count)>1)flags.push('REPEATED_SQL');
+  if(n1>=60)flags.push('N1_CANDIDATE');
+  if(s&&Number(s.fc)>0 && (Number(s.ft)||0)>=slowSec)flags.push('FETCH_SLOW');
+  return flags.join(';');
+}
+function csvDiagnosticPriority(s,f){
+  if(s&&s.isErr)return 'CRITICAL';
+  var n1=Number(f&&f.n1Score)||0, dur=Number(s&&s.dur)||0;
+  if(n1>=60 || dur>=slowSec*3)return 'HIGH';
+  if(dur>=slowSec || (s&&s.type==='SELECT' && !(s.where||'').trim()) || Number(f&&f.count)>1)return 'MEDIUM';
+  return 'INFO';
+}
 function exportCSV(){
-  if(!G.sql.length)return;
-  var rows=[['Line','Cursor ID','Context','Type','Duration (s)','SQL %','Execute (s)','Fetch (s)','Fetch Calls','Tables','WHERE','PeopleCode / AE','Variable → Bind','Fingerprint','Fingerprint Count','Fingerprint Total Time (s)','Avg (s)','P50 (s)','P95 (s)','P99 (s)','Max (s)','N+1 Score','N+1 Confidence','Error Category','Error Code','Error Message','SQL Text With Binds']];
-  var fm=Object.create(null);(G.sqlFingerprints||[]).forEach(function(f){f.statements.forEach(function(s){fm[s.lineNumber]=f;});});
-  G.sql.forEach(function(s){var f=fm[s.lineNumber]||{},vl=(s.variableLinks||[]).map(function(x){return '#'+x.bindIndex+' <- '+x.variable+'='+x.value+' ['+x.confidence+']';}).join('; ');rows.push([s.lineNumber,s.cursorId,s.ctx,s.type,(s.dur||0).toFixed(6),(s.sqlPercent||0).toFixed(2),(s.ex||0).toFixed(6),(s.ft||0).toFixed(6),s.fc,(s.tables||[]).join('; '),s.where||'',s.parentCall?s.parentCall.fn:'',vl,f.key||'',f.count||'',(f.totalTime||0).toFixed(6),(f.avgTime||0).toFixed(6),(f.p50||0).toFixed(6),(f.p95||0).toFixed(6),(f.p99||0).toFixed(6),(f.maxTime||0).toFixed(6),f.n1Score||0,f.n1Confidence||'',classifyDbError(s)||'',s.eCode==null?'':s.eCode,s.eMsg||'',substitutedSQL(s)]);});
-  var blob=new Blob([rows.map(function(r){return r.map(csvCell).join(',');}).join('\r\n')],{type:'text/csv;charset=utf-8;'}),a=document.createElement('a'),url=URL.createObjectURL(blob);a.href=url;a.download='trace_insights_diagnostics.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},1000);
+  if(!G.sql.length){alert('No SQL statements are available to export.');return;}
+  var rows=[['Trace Line','Execute Line','Error Line','Cursor ID','Context','SQL Type','Duration (s)','SQL %','Execute (s)','Fetch (s)','Fetch Calls','Bind Runs','Bind Count','Tables','WHERE','PeopleCode / AE Context','AE Step','Fingerprint','Repeat Count','Fingerprint Avg (s)','Fingerprint Max (s)','N+1 Score','N+1 Confidence','Diagnostic Priority','Diagnostic Flags','Error Category','Error Code','Error Message','SQL Text With Binds']];
+  var fm=Object.create(null);
+  (G.sqlFingerprints||[]).forEach(function(f){(f.statements||[]).forEach(function(x){fm[x.lineNumber]=f;});});
+  G.sql.forEach(function(s){
+    var f=fm[s.lineNumber]||{};
+    var vl=(s.variableLinks||[]).map(function(x){return '#'+x.bindIndex+' <- '+x.variable+'='+x.value+' ['+x.confidence+', '+x.distance+' lines]';}).join('; ');
+    var pc=s.parentCall?s.parentCall.fn:'';
+    var ae=s.aeStepKey||'';
+    var context=pc || ae || s.ctx || '';
+    var bindCount=Array.isArray(s.curB)?s.curB.length:0;
+    rows.push([
+      s.lineNumber||'',s.executeLine||'',s.errorLine||'',s.cursorId||'',s.ctx||'',s.type||'',
+      (s.dur||0).toFixed(6),(s.sqlPercent||0).toFixed(2),(s.ex||0).toFixed(6),(s.ft||0).toFixed(6),s.fc||0,
+      csvBindRuns(s),bindCount,(s.tables||[]).map(decodeHtmlEntities).join('; '),decodeHtmlEntities(s.where||''),pc,ae,
+      f.key||'',Number(f.count)||0,(Number(f.avgTime)||0).toFixed(6),(Number(f.maxTime)||0).toFixed(6),
+      Number(f.n1Score)||0,f.n1Confidence||'',csvDiagnosticPriority(s,f),csvDiagnosticFlags(s,f),
+      s.isErr?(classifyDbError(s)||'DATABASE_ERROR'):'',s.eCode==null?'':s.eCode,decodeHtmlEntities(s.eMsg||''),substitutedSQL(s)
+    ]);
+  });
+  // UTF-8 BOM improves Excel interoperability; every row remains a normal CSV record.
+  var csv='\ufeff'+rows.map(function(r){return r.map(csvCell).join(',');}).join('\r\n')+'\r\n';
+  var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}),a=document.createElement('a'),url=URL.createObjectURL(blob);
+  a.href=url;a.download='trace_insights_sql_diagnostics.csv';document.body.appendChild(a);a.click();a.remove();
+  setTimeout(function(){URL.revokeObjectURL(url);},1000);
 }
 
 function escapeHtml(t) { 
@@ -2899,14 +3782,14 @@ function formatBytes(bytes){bytes=Number(bytes)||0;if(bytes<1024)return bytes+' 
 
 // ── Sandbox Parser for Comparative Analysis ─────────────────────
 function parseTraceToModel(text,fname){
-  var origG=window.G, localG={sql:[],byWhere:[],byFrom:[],tables:[],stacks:[],valueIssues:[],execPath:[],allCalls:[],stats:[],vars:[],maxDepth:0,meta:{},insights:{},sqlFingerprints:[],rca:{},varEvents:[],varMap:{},ae:{steps:[],timings:[],tempTables:[]},transactions:{commits:[],rollbacks:[],connects:[],disconnects:[]},cursorStats:{},peopleCodeHotspots:[],tempTableStats:[],variableSQLLinks:[],traceFlags:{},traceFlagsExplicit:{}};
+  var origG=window.G, localG={sql:[],byWhere:[],byFrom:[],tables:[],stacks:[],valueIssues:[],execPath:[],allCalls:[],stats:[],vars:[],maxDepth:0,meta:{},insights:{},sqlFingerprints:[],rca:{},varEvents:[],varMap:{},ae:{steps:[],timings:[],tempTables:[]},transactions:{commits:[],rollbacks:[],connects:[],disconnects:[]},cursorStats:{},peopleCodeHotspots:[],tempTableStats:[],variableSQLLinks:[],varFlowTruncated:false,traceFlags:{},traceFlagsExplicit:{}};
   window.G=localG;
   try{
     var lines=text.split(/\r?\n/); extractPreParseMetadata(lines,fname); localG.rawLines=lines; localG.rawText=text;
     var isAET=localG.meta.format==='Application Engine Trace', isCobol=localG.meta.format==='COBOL SQL', isTRC=localG.meta.format==='AE SQL/PeopleCode';
     var procs=isCobol?[new CobolSQLProc()]:isAET?[new AETSQLProc(),new AETExecProc()]:[new SQLProc(),new StackProc(),new VarProc(),new ExecProc(isTRC),new ValueDiagnosticProc(),new VariableFlowProc()];
     for(var i=0;i<lines.length;i++){var ln=lines[i];for(var p=0;p<procs.length;p++)procs[p].pl(ln,i+1);}
-    for(var p=0;p<procs.length;p++)procs[p].done(localG); collectTransactionMarkers(lines); buildAgg(); reconcileMissingTraceFlags(); improveSQLMetadata(); correlateVariablesToSQL();
+    for(var p=0;p<procs.length;p++)procs[p].done(localG); collectTransactionMarkers(lines); buildAgg(); reconcileMissingTraceFlags(); improveSQLMetadata(); enrichVariableFlow(); correlateVariablesToSQL();
   }finally{window.G=origG;} return localG;
 }
 
