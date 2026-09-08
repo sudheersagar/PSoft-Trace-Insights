@@ -835,6 +835,114 @@
           .compare-page-actions { min-width: 0; }
         }
     </style>
+    <style id="accessibility-ui-overrides">
+        /* Accessibility / visibility hardening: consistent contrast and always-visible scrollbars. */
+        :root, [data-theme="dark"] {
+          --on-accent: #062a28;
+          --scroll-track: #141d2f;
+          --scroll-thumb: #66758d;
+          --scroll-thumb-hover: #9aa8bb;
+          --divider: #39465b;
+          --dim: #a7b0bd;
+          --focus-ring: #67e8f9;
+        }
+        [data-theme="light"] {
+          --on-accent: #ffffff;
+          --scroll-track: #e2e8f0;
+          --scroll-thumb: #64748b;
+          --scroll-thumb-hover: #475569;
+          --divider: #c1ccd9;
+          --dim: #475569;
+          --focus-ring: #0f766e;
+        }
+
+        html, body {
+          color-scheme: dark;
+          scrollbar-gutter: stable;
+        }
+        html[data-theme="light"] { color-scheme: light; }
+
+        /* Make native scrollbars visible in Chromium/Edge and Firefox. */
+        *, *::before, *::after {
+          scrollbar-width: thin;
+          scrollbar-color: var(--scroll-thumb) var(--scroll-track);
+        }
+        *::-webkit-scrollbar { width: 11px; height: 11px; }
+        *::-webkit-scrollbar-track {
+          background: var(--scroll-track);
+          border-radius: 0;
+        }
+        *::-webkit-scrollbar-thumb {
+          background: var(--scroll-thumb);
+          border: 2px solid var(--scroll-track);
+          border-radius: 8px;
+          min-height: 28px;
+        }
+        *::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); }
+        *::-webkit-scrollbar-corner { background: var(--scroll-track); }
+
+        /* Restore visible separators that were previously too faint in both themes. */
+        .finding, .rca-item, .sr { border-bottom-color: var(--divider) !important; }
+        table.dt td { border-bottom-color: var(--divider) !important; }
+        .diff-grid { border-bottom-color: var(--divider); }
+
+        /* Text contrast: secondary text remains readable without overpowering primary text. */
+        .subtitle, #mem, #sc, .card-subtitle, .finding-detail, .meta-k, .sk,
+        .kpi-label, .kpi-sub, .table-empty, .exec-stat, .compare-page-subtitle,
+        .compare-step-empty, .compare-step-meta .k, .compare-step-section h4,
+        .footer-copyright, .contact-label { color: var(--dim); }
+
+        /* Buttons, active controls, and disabled states need explicit contrast. */
+        .btn-p, .sb.act { color: var(--on-accent) !important; }
+        button:disabled, .btn-sm:disabled {
+          opacity: .58;
+          cursor: not-allowed;
+          filter: none;
+        }
+        button:disabled:hover, .btn-sm:disabled:hover {
+          color: var(--dim);
+          border-color: var(--border);
+        }
+        button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible {
+          outline: 2px solid var(--focus-ring);
+          outline-offset: 2px;
+        }
+
+        /* Improve light-mode selected/hover states without relying on dark-theme rgba values. */
+        [data-theme="light"] .diff-cell-idx { background: rgba(15,23,42,.035); }
+        [data-theme="light"] .diff-diverge { background: rgba(220,38,38,.075); }
+        [data-theme="light"] .diff-added { background: rgba(22,163,74,.075); }
+        [data-theme="light"] .diff-removed { background: rgba(180,83,9,.075); }
+        [data-theme="light"] .diff-codedrift { background: rgba(194,65,12,.075); }
+        [data-theme="light"] .diff-bindedrift { background: rgba(220,38,38,.075); }
+        [data-theme="light"] table.dt tr:hover td { background: rgba(13,148,136,.065); }
+        [data-theme="light"] table.dt tr.sel td { background: rgba(13,148,136,.12) !important; }
+        [data-theme="light"] .er:hover { background: rgba(15,23,42,.045); }
+        [data-theme="light"] .er.sel { background: rgba(13,148,136,.10); }
+        [data-theme="light"] #dz.over { background: rgba(13,148,136,.055); }
+        [data-theme="light"] .dcard:hover, [data-theme="light"] .over .dcard { background: rgba(13,148,136,.035); }
+        [data-theme="light"] .readme-badge { background: rgba(13,148,136,.09); border-color: rgba(13,148,136,.28); }
+
+        /* Keep the comparison workspace usable on narrow screens. */
+        @media (max-width: 900px) {
+          #hdr { align-items: flex-start; flex-wrap: wrap; }
+          #hdr-r { width: 100%; margin-left: 0; justify-content: flex-start; overflow-x: auto; overflow-y: hidden; padding-bottom: 2px; }
+          .compare-page-head { flex-wrap: wrap; }
+          .compare-page-actions { flex-wrap: wrap; }
+        }
+        @media (max-width: 600px) {
+          #hdr { gap: 7px; padding: 8px 10px; }
+          #hdr-r { gap: 6px; }
+          .btn-sm { padding: 7px 9px; }
+          #comparePage > #compareRoot { padding: 10px; }
+          .diff-grid { grid-template-columns: 42px minmax(220px,1fr) minmax(220px,1fr); min-width: 500px; }
+          .diff-card { overflow-x: auto; }
+          .diff-summary-card { padding: 12px 14px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+        }
+    </style>
 </head>
 
 <body>
@@ -1382,13 +1490,20 @@
         
         // ── Theme State Management ─────────────────────────────────────────
         function initTheme() {
-          var saved = localStorage.getItem('ps_trace_theme') || 'dark';
-          applyTheme(saved);
+          var saved = 'dark';
+          try {
+            var stored = localStorage.getItem('ps_trace_theme');
+            if (stored === 'light' || stored === 'dark') saved = stored;
+          } catch (e) { /* localStorage may be blocked; keep the default theme */ }
+          applyTheme(saved, false);
         }
         
-        function applyTheme(theme) {
+        function applyTheme(theme, persist) {
+          theme = theme === 'light' ? 'light' : 'dark';
           document.documentElement.setAttribute('data-theme', theme);
-          localStorage.setItem('ps_trace_theme', theme);
+          if (persist !== false) {
+            try { localStorage.setItem('ps_trace_theme', theme); } catch (e) { /* best effort */ }
+          }
           var btn = document.getElementById('themeToggleBtn');
           if (btn) {
             if (theme === 'light') {
