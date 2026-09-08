@@ -597,6 +597,7 @@ button.var-summary-item.active { border-color: var(--accent); background: var(--
 .diff-diverge { background: rgba(248, 113, 113, 0.08); }
 .diff-added { background: rgba(63, 185, 80, 0.08); }
 .diff-removed { background: rgba(210, 153, 34, 0.08); }
+.diff-codedrift { background: rgba(219, 109, 40, 0.08); }
 .diff-badge {
   display: inline-block;
   padding: 1px 6px;
@@ -610,6 +611,7 @@ button.var-summary-item.active { border-color: var(--accent); background: var(--
 .diff-badge-deviate { background: rgba(248, 113, 113, 0.2); color: var(--red); }
 .diff-badge-added { background: rgba(63, 185, 80, 0.2); color: var(--green); }
 .diff-badge-removed { background: rgba(210, 153, 34, 0.2); color: var(--yellow); }
+.diff-badge-codedrift { background: rgba(219, 109, 40, 0.22); color: var(--orange); }
 .diff-diag-box {
   background: var(--s2);
   border-left: 3px solid var(--yellow);
@@ -3678,6 +3680,7 @@ function goHome() {
   document.getElementById('fi').value = '';
   document.getElementById('homeFooter').style.display = 'block';
   CompareState.result = null; CompareState.m1 = null; CompareState.m2 = null; CompareState.hideMatched = false;
+  CompareState.p1 = null; CompareState.p2 = null; CompareState.pageOffset = 0;
 }
 
 function csvCell(v){
@@ -3751,7 +3754,12 @@ function memMon() {
 }
 
 // ── Trace Compare Model & State Management ────────────────────────
-var CompareState = { file1Data:null, file1Name:'', file2Data:null, file2Name:'', result:null, m1:null, m2:null, hideMatched:false, busy:false };
+// The 3,500-step comparison window is load-bearing (quadratic Myers-diff blowup beyond it),
+// so long traces are compared page by page instead of raising the cap. CompareState.p1/p2
+// hold the FULL canonical paths (computed once) so paging only re-runs the cheap slice +
+// alignment step, not a full re-parse.
+var COMPARE_PAGE_SIZE = 3500;
+var CompareState = { file1Data:null, file1Name:'', file2Data:null, file2Name:'', result:null, m1:null, m2:null, p1:null, p2:null, pageOffset:0, hideMatched:false, busy:false };
 function setCompareStatus(message){ var el=document.getElementById('compareStatus'); if(el) el.textContent=message||''; }
 function openCompareModal(){
   var modal=document.getElementById('compareModal'); if(!modal)return;
@@ -3803,23 +3811,76 @@ function extractCanonicalPath(model){
     var sig='',sqlText='',binds=[];
     if(c.type==='SQL'&&c.sqlStmt){var tables=c.sqlStmt.tables||[];sig='SQL '+c.sqlStmt.type+' ['+(tables.join(',')||'NONE')+']';sqlText=normalizeSQL(c.sqlStmt.text||'');binds=(c.sqlStmt.curB||[]).map(function(b){return b.idx+'='+String(b.val);});}
     else if(c.aeProgram)sig='AE '+c.aeProgram+'.'+c.aeSection+'.'+c.aeStep+' ('+c.aeAction+')'; else sig='PPC '+(c.fn||'Anonymous');
-    var nearbyVars=[];for(var vi=left;vi<right;vi++){var v=vars[vi];nearbyVars.push(v.variable+' = '+v.value+' ('+v.type+' @ line '+v.line+')');}
-    list.push({key:sig,rawKey:sig+(sqlText?' :: '+sqlText.slice(0,120):''),type:c.type,fn:c.fn,aeProgram:c.aeProgram,startLine:c.startLine,dur:c.dur||0,codeSnippet:c.codeText||'',sqlText:sqlText,binds:binds,nearbyVars:nearbyVars});
+    var nearbyVars=[];
+    for(var vi=left;vi<right;vi++){
+      var v=vars[vi];
+      // Restrict to the same execution context as this call. Without this, a busy trace
+      // with multiple interleaved PSAPPSRV/AE contexts can pull an unrelated session's
+      // variable state into this step's "nearby variables" purely because its raw
+      // trace-line number happens to fall inside the window -- see enrichVariableFlow,
+      // which is what populates v.context on each variable event before this runs.
+      if((v.context||'')!==(c.ctxId||'')) continue;
+      nearbyVars.push({variable:v.variable,value:v.value,type:v.type,line:v.line});
+    }
+    // rawKey previously truncated the normalized SQL text to 120 chars for the comparison
+    // key. PeopleSoft-generated SQL (security views, tableset-sharing joins, long WHERE
+    // clauses) routinely runs well past 120 chars before the clause that actually differs
+    // between environments, so two structurally different statements could compare equal
+    // and a real deviation would be silently reported as a match. Use the full text.
+    list.push({key:sig,rawKey:sig+(sqlText?' :: '+sqlText:''),type:c.type,fn:c.fn,aeProgram:c.aeProgram,startLine:c.startLine,ctxId:c.ctxId||'',dur:c.dur||0,codeSnippet:c.codeText||'',sqlText:sqlText,binds:binds,nearbyVars:nearbyVars});
   } return list;
 }
 
+// Strips the captured source-code line-number prefix ("NN: ") from each line of a captured
+// code block before comparing two snapshots for content drift. Line numbers shift trivially
+// whenever unrelated code earlier in the same program changes (e.g. an added comment), so
+// comparing the raw captured text would flag that as "code differs" even when the actual
+// logic at this step is identical.
+function normalizeCodeSnippet(text) {
+  if (!text) return '';
+  return String(text).split('\n').map(function(line) {
+    return line.replace(/^\s*\d+:\s*/, '').trim();
+  }).join('\n').trim();
+}
+
+// Flags MATCHed steps (same logical function/program/step ran on both sides, in the same
+// order) whose captured PeopleCode source text nonetheless differs. This is the tool's only
+// signal that distinguishes "code changed" from "data changed" or "path changed" when the
+// call sequence itself lines up -- a patched FieldChange/step that doesn't happen to add or
+// remove a nested SQL/call node is otherwise completely invisible to the alignment.
+function annotateCodeDrift(aligned) {
+  aligned.forEach(function(row) {
+    if (row.type !== 'MATCH') return;
+    var c1 = row.step1 && row.step1.codeSnippet ? normalizeCodeSnippet(row.step1.codeSnippet) : '';
+    var c2 = row.step2 && row.step2.codeSnippet ? normalizeCodeSnippet(row.step2.codeSnippet) : '';
+    // Only flag when BOTH sides captured code and it differs. If only one side captured
+    // code (e.g. differing TracePC verbosity between environments), we cannot tell whether
+    // the logic actually differs -- that ambiguity is surfaced separately in the
+    // configuration-comparison caution panel rather than guessed at here.
+    if (c1 && c2 && c1 !== c2) row.codeDiffers = true;
+  });
+}
+
 // ── Sequence Alignment & Divergence Diagnostics ─────────────
-function diffExecutionPaths(p1,p2){
-  var MAX_LEN=3500,a=p1.slice(0,MAX_LEN),b=p2.slice(0,MAX_LEN),N=a.length,M=b.length;
-  if(!N&&!M)return{aligned:[],divergence:null,truncated:false};
+function diffExecutionPaths(p1,p2,offset,pageSize){
+  offset = offset || 0;
+  var MAX_LEN = pageSize || COMPARE_PAGE_SIZE;
+  var totalSteps1 = p1.length, totalSteps2 = p2.length;
+  var a=p1.slice(offset,offset+MAX_LEN),b=p2.slice(offset,offset+MAX_LEN),N=a.length,M=b.length;
+  var hasNextPage=(offset+MAX_LEN)<Math.max(totalSteps1,totalSteps2), hasPrevPage=offset>0;
+  if(!N&&!M)return{aligned:[],divergence:null,truncated:hasNextPage||hasPrevPage,pageOffset:offset,pageSize:MAX_LEN,totalSteps1:totalSteps1,totalSteps2:totalSteps2,hasNextPage:hasNextPage,hasPrevPage:hasPrevPage,comparedSteps1:0,comparedSteps2:0};
   var prefix=0;while(prefix<N&&prefix<M&&a[prefix].rawKey===b[prefix].rawKey)prefix++;
   var suffix=0;while(suffix<N-prefix&&suffix<M-prefix&&a[N-1-suffix].rawKey===b[M-1-suffix].rawKey)suffix++;
   var aa=a.slice(prefix,N-suffix),bb=b.slice(prefix,M-suffix),middle=myersAlign(aa,bb),aligned=[];
   for(var i=0;i<prefix;i++)aligned.push({type:'MATCH',step1:a[i],step2:b[i]});
   for(var j=0;j<middle.length;j++)aligned.push(middle[j]);
   for(var k=suffix;k>0;k--)aligned.push({type:'MATCH',step1:a[N-k],step2:b[M-k]});
+  annotateCodeDrift(aligned);
   var divergenceIndex=-1;for(var d=0;d<aligned.length;d++){if(aligned[d].type!=='MATCH'){divergenceIndex=d;break;}}
-  return{aligned:aligned,divergence:divergenceIndex===-1?null:buildDivergenceDiagnosis(aligned,divergenceIndex),truncated:p1.length>MAX_LEN||p2.length>MAX_LEN,comparedSteps1:N,comparedSteps2:M};
+  // "truncated" now means "part of a multi-page comparison" (true on any page once the
+  // combined trace exceeds one page), independent of which page is currently shown -- it
+  // drives the boundary-artifact caution note in renderCompareView.
+  return{aligned:aligned,divergence:divergenceIndex===-1?null:buildDivergenceDiagnosis(aligned,divergenceIndex),truncated:hasNextPage||hasPrevPage,pageOffset:offset,pageSize:MAX_LEN,totalSteps1:totalSteps1,totalSteps2:totalSteps2,hasNextPage:hasNextPage,hasPrevPage:hasPrevPage,comparedSteps1:N,comparedSteps2:M};
 }
 function myersAlign(a,b){
   // Typed-array frontier storage. The original Map-per-generation version pays hashing and
@@ -3862,12 +3923,55 @@ function reconstructMyers(a,b,trace,d,OFFSET){
 function buildDivergenceDiagnosis(aligned,firstDivergenceIdx){
   var lastMatchedStep=null;for(var i=firstDivergenceIdx-1;i>=0;i--){if(aligned[i].type==='MATCH'){lastMatchedStep=aligned[i];break;}}
   var bindDiff=[],varDiff=[],cause='Branching condition evaluation differed.';
-  if(lastMatchedStep){var vars1=lastMatchedStep.step1?(lastMatchedStep.step1.nearbyVars||[]):[],vars2=lastMatchedStep.step2?(lastMatchedStep.step2.nearbyVars||[]):[],set1=new Set(vars1),set2=new Set(vars2);
-    vars1.forEach(function(v){if(!set2.has(v))varDiff.push('Trace 1: '+v);});vars2.forEach(function(v){if(!set1.has(v))varDiff.push('Trace 2: '+v);});
+  if(lastMatchedStep){
+    // Compare nearby variables by NAME + VALUE, taking the most recent observation of each
+    // name within the window on each side. The previous version compared opaque strings
+    // that embedded each trace's own absolute line number (e.g. "&SAVE = Y (ASSIGN @ line
+    // 4821)"), so an identical name/value pair almost never matched across two different
+    // trace files purely because the line numbers differ -- every divergence reported
+    // every nearby variable as "different," burying the one that actually mattered.
+    var vars1=lastMatchedStep.step1?(lastMatchedStep.step1.nearbyVars||[]):[];
+    var vars2=lastMatchedStep.step2?(lastMatchedStep.step2.nearbyVars||[]):[];
+    var byName1=Object.create(null), byName2=Object.create(null);
+    vars1.forEach(function(v){ (byName1[v.variable]=byName1[v.variable]||[]).push(v); });
+    vars2.forEach(function(v){ (byName2[v.variable]=byName2[v.variable]||[]).push(v); });
+    var allNames=Object.keys(byName1).concat(Object.keys(byName2)).filter(function(n,idx,arr){return arr.indexOf(n)===idx;});
+    allNames.forEach(function(name){
+      var l1=byName1[name], l2=byName2[name];
+      if(l1&&l2){
+        var last1=l1[l1.length-1], last2=l2[l2.length-1];
+        if(normalizeVariableValue(last1.value)!==normalizeVariableValue(last2.value)){
+          varDiff.push(name+': Trace 1 = "'+last1.value+'" (line '+last1.line+') vs Trace 2 = "'+last2.value+'" (line '+last2.line+')');
+        }
+        // identical values on both sides explain nothing about the divergence and are
+        // intentionally omitted rather than padding the list.
+      } else if(l1&&!l2){
+        varDiff.push(name+': only observed in Trace 1 (= "'+l1[l1.length-1].value+'")');
+      } else if(l2&&!l1){
+        varDiff.push(name+': only observed in Trace 2 (= "'+l2[l2.length-1].value+'")');
+      }
+    });
     var b1=lastMatchedStep.step1?(lastMatchedStep.step1.binds||[]):[],b2=lastMatchedStep.step2?(lastMatchedStep.step2.binds||[]):[];if(b1.join('|')!==b2.join('|')){bindDiff.push('Trace 1 SQL Binds: ['+b1.join(', ')+']');bindDiff.push('Trace 2 SQL Binds: ['+b2.join(', ')+']');}
   }
-  if(bindDiff.length)cause='SQL Bind parameters differed in the preceding statement.';else if(varDiff.length)cause='Variable assignment or buffer field state differed before this step.';
-  return{divergenceIndex:firstDivergenceIdx,lastAlignedStep:lastMatchedStep,probableCause:cause,bindDifferences:bindDiff,variableDifferences:varDiff};
+  // If the diverging step itself names a function/program/SQL shape that never appears
+  // anywhere else in the other trace's canonical path, that is a much stronger "different
+  // code path entirely" signal than a bind/variable difference -- surface it distinctly so
+  // it isn't misread as a data-driven branch.
+  var divergingRow=aligned[firstDivergenceIdx];
+  var newCodePath=null;
+  if(divergingRow){
+    if(divergingRow.type==='ADDED'&&divergingRow.step2&&(divergingRow.step2.type==='NORMAL'||divergingRow.step2.type==='EXTERNAL'||divergingRow.step2.type==='CALL')){
+      var seenIn1=aligned.some(function(r){return r.step1&&r.step1.rawKey===divergingRow.step2.rawKey;});
+      if(!seenIn1) newCodePath='Trace 2';
+    } else if(divergingRow.type==='REMOVED'&&divergingRow.step1&&(divergingRow.step1.type==='NORMAL'||divergingRow.step1.type==='EXTERNAL'||divergingRow.step1.type==='CALL')){
+      var seenIn2=aligned.some(function(r){return r.step2&&r.step2.rawKey===divergingRow.step1.rawKey;});
+      if(!seenIn2) newCodePath='Trace 1';
+    }
+  }
+  if(newCodePath)cause='A code path exclusive to '+newCodePath+' was invoked -- this function/step never runs at all in the other trace, which points toward a code or configuration difference rather than a data-driven branch.';
+  else if(bindDiff.length)cause='SQL Bind parameters differed in the preceding statement.';
+  else if(varDiff.length)cause='Variable assignment or buffer field state differed before this step.';
+  return{divergenceIndex:firstDivergenceIdx,lastAlignedStep:lastMatchedStep,probableCause:cause,bindDifferences:bindDiff,variableDifferences:varDiff,exclusiveCodePath:newCodePath};
 }
 function showComparePage(){var page=document.getElementById('comparePage');if(!page)return;document.getElementById('dz').style.display='none';document.getElementById('main').style.display='none';document.getElementById('homeFooter').style.display='none';page.classList.add('on');page.setAttribute('aria-hidden','false');}
 function closeComparePage(){var page=document.getElementById('comparePage');if(page){page.classList.remove('on');page.setAttribute('aria-hidden','true');}document.getElementById('main').style.display='flex';document.getElementById('dz').style.display='none';document.getElementById('homeFooter').style.display='none';gTab('overview');}
@@ -3876,9 +3980,39 @@ function executeTraceComparison(){
   if(!CompareState.file1Data||!CompareState.file2Data){if(stat)stat.textContent='Please select both Trace 1 and Trace 2 files to execute comparison.';return;}
   CompareState.busy=true;var runBtn=document.getElementById('btnRunCompare');if(runBtn){runBtn.disabled=true;runBtn.textContent='Comparing…';}setCompareStatus('Parsing traces and aligning execution sequences…');
   setTimeout(function(){var started=performance.now();try{
-    var m1=(G&&G.rawText&&CompareState.file1Name===G.meta.fileName)?G:parseTraceToModel(CompareState.file1Data,CompareState.file1Name),m2=parseTraceToModel(CompareState.file2Data,CompareState.file2Name),p1=extractCanonicalPath(m1),p2=extractCanonicalPath(m2),res=diffExecutionPaths(p1,p2);
-    CompareState.result=res;CompareState.m1=m1;CompareState.m2=m2;CompareState.hideMatched=!!res.truncated;closeCompareModalExplicit();showComparePage();renderCompareView(m1,m2,res);var perf=document.getElementById('comparePerf');if(perf)perf.textContent='Compared in '+((performance.now()-started)/1000).toFixed(2)+' s';
+    var m1=(G&&G.rawText&&CompareState.file1Name===G.meta.fileName)?G:parseTraceToModel(CompareState.file1Data,CompareState.file1Name),m2=parseTraceToModel(CompareState.file2Data,CompareState.file2Name),p1=extractCanonicalPath(m1),p2=extractCanonicalPath(m2);
+    // p1/p2 are the FULL canonical paths, cached once here. Paging through a long trace only
+    // re-slices and re-aligns from this cache (compareGotoPage) rather than re-parsing or
+    // re-extracting on every page turn.
+    CompareState.p1=p1;CompareState.p2=p2;CompareState.pageOffset=0;
+    var res=diffExecutionPaths(p1,p2,0,COMPARE_PAGE_SIZE);
+    CompareState.result=res;CompareState.m1=m1;CompareState.m2=m2;CompareState.hideMatched=true;closeCompareModalExplicit();showComparePage();renderCompareView(m1,m2,res);var perf=document.getElementById('comparePerf');if(perf)perf.textContent='Compared in '+((performance.now()-started)/1000).toFixed(2)+' s';
   }catch(err){setCompareStatus('Comparison failed: '+(err&&err.message?err.message:String(err)));console.error('Trace comparison failed:',err);}finally{CompareState.busy=false;if(runBtn){runBtn.disabled=false;runBtn.textContent='Run Path Compare';}}},40);
+}
+// Re-slices the already-computed canonical paths at a new offset and re-runs the (cheap,
+// single-page-sized) alignment. Used by the Next/Previous 3,500 controls so a very long
+// trace can be walked page by page until every step on both sides has been covered.
+function compareGotoPage(newOffset){
+  if(!CompareState.p1 || !CompareState.p2 || !CompareState.m1 || !CompareState.m2) return;
+  if(newOffset < 0) newOffset = 0;
+  var started = performance.now();
+  var res = diffExecutionPaths(CompareState.p1, CompareState.p2, newOffset, COMPARE_PAGE_SIZE);
+  CompareState.pageOffset = newOffset;
+  CompareState.result = res;
+  CompareState.hideMatched = true;
+  renderCompareView(CompareState.m1, CompareState.m2, res);
+  var perf = document.getElementById('comparePerf');
+  if (perf) perf.textContent = 'Compared in ' + ((performance.now() - started) / 1000).toFixed(2) + ' s';
+  var root = document.getElementById('compareRoot');
+  if (root) root.scrollTop = 0;
+}
+function compareNextPage(){
+  if(!CompareState.result || !CompareState.result.hasNextPage) return;
+  compareGotoPage(CompareState.pageOffset + COMPARE_PAGE_SIZE);
+}
+function comparePrevPage(){
+  if(!CompareState.result || !CompareState.result.hasPrevPage) return;
+  compareGotoPage(Math.max(0, CompareState.pageOffset - COMPARE_PAGE_SIZE));
 }
 function closeCompareStepModal(e){
   if(e && e.target && e.target.id!=='compareStepModal') return;
@@ -3889,13 +4023,16 @@ function showCompareStepDifference(idx){
   var res=CompareState.result, body=document.getElementById('compareStepBody'), modal=document.getElementById('compareStepModal');
   if(!res || !body || !modal || !res.aligned || !res.aligned[idx]) return;
   var row=res.aligned[idx], s1=row.step1, s2=row.step2;
-  if(row.type==='MATCH') return;
+  // MATCH rows are openable when annotateCodeDrift flagged them -- that is exactly the case
+  // where the person needs this modal (to see the two captured code blocks side by side)
+  // even though the path structure itself lined up.
+  if(row.type==='MATCH' && !row.codeDiffers) return;
   function esc(v){return escapeHtml(v==null?'':v);}
   function listHtml(items){
     if(!items || !items.length) return '<div class="compare-step-empty">None</div>';
     return '<ul style="margin:0;padding-left:18px;font-size:11px;line-height:1.5">'+items.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>';
   }
-  function panelHtml(label,step){
+  function panelHtml(label,step,codeDiffers){
     if(!step) return '<div class="compare-step-panel"><h4>'+esc(label)+'</h4><div class="compare-step-empty">Step not present in this trace.</div></div>';
     var html='<div class="compare-step-panel"><h4>'+esc(label)+'</h4><div class="compare-step-meta">'+
       '<span class="k">Path signature</span><span>'+esc(step.key)+'</span>'+
@@ -3904,21 +4041,29 @@ function showCompareStepDifference(idx){
       '</div>';
     if(step.sqlText) html+='<div class="compare-step-section"><h4>SQL</h4><pre class="code-block">'+esc(step.sqlText)+'</pre></div>';
     if(step.binds && step.binds.length) html+='<div class="compare-step-section"><h4>SQL Binds</h4>'+listHtml(step.binds)+'</div>';
-    if(step.nearbyVars && step.nearbyVars.length) html+='<div class="compare-step-section"><h4>Nearby Variables</h4>'+listHtml(step.nearbyVars)+'</div>';
-    if(step.codeSnippet) html+='<div class="compare-step-section compare-step-code"><h4>Captured Code</h4><pre class="code-block">'+esc(step.codeSnippet)+'</pre></div>';
+    if(step.nearbyVars && step.nearbyVars.length) {
+      // nearbyVars is now structured ({variable,value,type,line}) rather than a
+      // pre-formatted string, since the comparison logic needs it structured -- format
+      // for display here.
+      var varLines = step.nearbyVars.map(function(v){ return v.variable+' = '+v.value+' ('+v.type+' @ line '+v.line+')'; });
+      html+='<div class="compare-step-section"><h4>Nearby Variables</h4>'+listHtml(varLines)+'</div>';
+    }
+    if(step.codeSnippet) {
+      var codeHeader = 'Captured Code' + (codeDiffers ? ' <span style="color:var(--orange);font-weight:700">&#9888; differs from other trace</span>' : '');
+      html+='<div class="compare-step-section compare-step-code"><h4>'+codeHeader+'</h4><pre class="code-block">'+esc(step.codeSnippet)+'</pre></div>';
+    }
     return html+'</div>';
   }
-  var kind=row.type==='ADDED'?'Step added in Trace 2':row.type==='REMOVED'?'Step removed from Trace 2':'Execution step differs between traces';
-  document.getElementById('compareStepTitle').textContent='Step Difference — #' + (idx+1);
+  var kind=row.type==='ADDED'?'Step added in Trace 2':row.type==='REMOVED'?'Step removed from Trace 2':row.codeDiffers?'Same logical step ran in both traces, but the captured source code differs':'Execution step differs between traces';
+  document.getElementById('compareStepTitle').textContent='Step Difference — #' + ((CompareState.pageOffset||0) + idx + 1);
   document.getElementById('compareStepSubtitle').textContent=kind;
   body.innerHTML='<div style="margin-bottom:12px;font-size:11px;color:var(--dim)">Compare the captured details at this aligned path position. Values are shown exactly from each trace model.</div>'+
-    '<div class="compare-step-grid">'+panelHtml('Trace 1: '+CompareState.file1Name,s1)+panelHtml('Trace 2: '+CompareState.file2Name,s2)+'</div>';
+    '<div class="compare-step-grid">'+panelHtml('Trace 1: '+CompareState.file1Name,s1,row.codeDiffers)+panelHtml('Trace 2: '+CompareState.file2Name,s2,row.codeDiffers)+'</div>';
   modal.classList.add('on'); modal.setAttribute('aria-hidden','false');
 }
 function toggleDiffFilter(){
   if(!CompareState.result||!CompareState.m1||!CompareState.m2) return;
-  if(CompareState.result.truncated){ CompareState.hideMatched=true; }
-  else { CompareState.hideMatched=!CompareState.hideMatched; }
+  CompareState.hideMatched=!CompareState.hideMatched;
   // Matched rows are only ever created in the DOM when hideMatched is false (see
   // renderCompareView), so toggling this filter must re-render rather than hunt for existing
   // .diff-match nodes to hide/show — a full re-render also keeps the toolbar's button label and
@@ -3927,6 +4072,67 @@ function toggleDiffFilter(){
 }
 
 // ── Visual Diff Table Rendering ────────────────────────────────────
+// Compares trace-level metadata/configuration between the two loaded models and returns
+// plain-language cautions. This exists because "base env vs target env" comparisons are
+// frequently confounded by capture-configuration differences rather than real behavioral
+// differences: a lower TracePC/TraceSQL verbosity on one side, a different PeopleTools
+// release, or a different database platform can all make the path/bind/variable diff noisy
+// or misleading in ways that have nothing to do with the code or data actually being
+// compared. Surfacing this up front lets the person calibrate how much to trust the diff
+// below before they start chasing individual deviations.
+function buildCompareConfigWarnings(m1, m2) {
+  var warnings = [];
+  var f1 = (m1.meta && m1.meta.format) || 'Unknown', f2 = (m2.meta && m2.meta.format) || 'Unknown';
+  if (f1 !== f2) warnings.push('Trace formats differ (Trace 1: ' + f1 + ' vs Trace 2: ' + f2 + '). Comparing different capture types (e.g. an online trace against an Application Engine batch trace) will show most steps as added/removed even when the underlying process is functionally equivalent.');
+
+  var tr1 = (m1.meta && m1.meta.toolsRelease) || 'Not stamped', tr2 = (m2.meta && m2.meta.toolsRelease) || 'Not stamped';
+  if (tr1 !== 'Not stamped' && tr2 !== 'Not stamped' && tr1 !== tr2) warnings.push('PeopleTools release differs (Trace 1: ' + tr1 + ' vs Trace 2: ' + tr2 + '). Some deviations below may originate from a PeopleTools upgrade rather than application code or data.');
+
+  var db1 = (m1.meta && m1.meta.database) || 'Not stamped', db2 = (m2.meta && m2.meta.database) || 'Not stamped';
+  if (db1 !== 'Not stamped' && db2 !== 'Not stamped' && db1 !== db2) warnings.push('Database differs (Trace 1: ' + db1 + ' vs Trace 2: ' + db2 + '). SQL structure or plan differences may be platform-driven rather than a code or data difference.');
+
+  var sql1 = m1.traceFlags && m1.traceFlags.TraceSQL, sql2 = m2.traceFlags && m2.traceFlags.TraceSQL;
+  var binds1 = (sql1 !== null && sql1 !== undefined) ? ((sql1 & 2) === 2) : null;
+  var binds2 = (sql2 !== null && sql2 !== undefined) ? ((sql2 & 2) === 2) : null;
+  if (binds1 !== null && binds2 !== null && binds1 !== binds2) warnings.push('SQL bind-variable tracing (TraceSQL bit 2) is present on only one side (Trace 1: ' + (binds1 ? 'Yes' : 'No') + ', Trace 2: ' + (binds2 ? 'Yes' : 'No') + '). Bind-based root-cause findings below will be incomplete or misleading for the side without bind data.');
+
+  var pc1 = m1.traceFlags && m1.traceFlags.TracePC, pc2 = m2.traceFlags && m2.traceFlags.TracePC;
+  var havePC1 = pc1 !== null && pc1 !== undefined, havePC2 = pc2 !== null && pc2 !== undefined;
+  if (havePC1 !== havePC2) warnings.push('PeopleCode execution tracing (TracePC) was detected on only one side. Step-count and path-length differences may reflect capture depth rather than actual logic differences.');
+
+  return warnings;
+}
+
+function renderCompareConfigCard(m1, m2) {
+  function fmtFlag(v){ return (v===null||v===undefined) ? 'Not detected' : (v + ' (0x' + Number(v).toString(16).toUpperCase() + ')'); }
+  var rows = [
+    ['Format', (m1.meta&&m1.meta.format)||'—', (m2.meta&&m2.meta.format)||'—'],
+    ['Tools Release', (m1.meta&&m1.meta.toolsRelease)||'Not stamped', (m2.meta&&m2.meta.toolsRelease)||'Not stamped'],
+    ['Database', (m1.meta&&m1.meta.database)||'Not stamped', (m2.meta&&m2.meta.database)||'Not stamped'],
+    ['TraceSQL', fmtFlag(m1.traceFlags&&m1.traceFlags.TraceSQL), fmtFlag(m2.traceFlags&&m2.traceFlags.TraceSQL)],
+    ['TracePC', fmtFlag(m1.traceFlags&&m1.traceFlags.TracePC), fmtFlag(m2.traceFlags&&m2.traceFlags.TracePC)],
+    ['TraceAE', fmtFlag(m1.traceFlags&&m1.traceFlags.TraceAE), fmtFlag(m2.traceFlags&&m2.traceFlags.TraceAE)],
+    ['Total Trace Lines', formatInt((m1.meta&&m1.meta.lineCount)||0), formatInt((m2.meta&&m2.meta.lineCount)||0)]
+  ];
+  var warnings = buildCompareConfigWarnings(m1, m2);
+  var card = document.createElement('div');
+  card.className = 'diff-summary-card';
+  card.style.borderLeftColor = warnings.length ? 'var(--yellow)' : 'var(--accent)';
+  var html = '<div style="font-weight:700; font-size:13px; color:var(--accent);">Trace Configuration Comparison</div>';
+  html += '<div style="margin-top:8px; overflow:auto;"><table style="width:100%; border-collapse:collapse; font-size:11px;">';
+  html += '<tr style="color:var(--dim); text-align:left;"><th style="padding:4px 8px;">Attribute</th><th style="padding:4px 8px;">Trace 1</th><th style="padding:4px 8px;">Trace 2</th></tr>';
+  rows.forEach(function(r) {
+    var differs = String(r[1]) !== String(r[2]);
+    html += '<tr style="border-top:1px solid var(--border);' + (differs ? 'color:var(--yellow);' : '') + '"><td style="padding:4px 8px;">' + escapeHtml(r[0]) + '</td><td style="padding:4px 8px;">' + escapeHtml(r[1]) + '</td><td style="padding:4px 8px;">' + escapeHtml(r[2]) + '</td></tr>';
+  });
+  html += '</table></div>';
+  if (warnings.length) {
+    html += '<div class="diff-diag-box"><strong>Interpretation cautions:</strong><br>' + warnings.map(escapeHtml).join('<br><br>') + '</div>';
+  }
+  card.innerHTML = html;
+  return card;
+}
+
 function renderCompareView(m1, m2, diffRes) {
   var root = document.getElementById('compareRoot');
   var tb = document.getElementById('compareToolbar');
@@ -3934,23 +4140,46 @@ function renderCompareView(m1, m2, diffRes) {
   root.innerHTML = '';
   tb.innerHTML = '';
 
+  root.appendChild(renderCompareConfigCard(m1, m2));
+
   var aligned = diffRes.aligned;
   var div = diffRes.divergence;
+  var pageOffset = diffRes.pageOffset || 0;
 
   var matches = aligned.filter(function(x) { return x.type === 'MATCH'; }).length;
   var diffs = aligned.length - matches;
+  var codeDrifts = aligned.filter(function(x) { return x.type === 'MATCH' && x.codeDiffers; }).length;
 
-  var filterButton = diffRes.truncated
-    ? '<span class="exec-stat" style="color:var(--yellow)">Deviations only — comparison capped at 3,500 path steps per trace</span>'
-    : '<button class="btn-sm" id="btnFilterDiff" onclick="toggleDiffFilter()">' + (CompareState.hideMatched ? 'Show All Steps' : 'Deviations Only') + '</button>';
+  var filterButton = '<button class="btn-sm" id="btnFilterDiff" onclick="toggleDiffFilter()">' + (CompareState.hideMatched ? 'Show All Steps' : 'Deviations Only') + '</button>';
+
+  var pageControls = '';
+  if (diffRes.truncated) {
+    var pageSize = diffRes.pageSize || COMPARE_PAGE_SIZE;
+    var totalPages = Math.max(Math.ceil((diffRes.totalSteps1 || 0) / pageSize), Math.ceil((diffRes.totalSteps2 || 0) / pageSize), 1);
+    var currentPage = Math.floor(pageOffset / pageSize) + 1;
+    var pageEnd = pageOffset + Math.max(diffRes.comparedSteps1 || 0, diffRes.comparedSteps2 || 0);
+    pageControls =
+      '<span class="exec-stat" style="color:var(--yellow)">Page ' + currentPage + ' of ' + totalPages + ' — steps ' + (pageOffset + 1) + '–' + pageEnd + ' of up to ' + Math.max(diffRes.totalSteps1, diffRes.totalSteps2) + '</span>' +
+      '<button class="btn-sm" onclick="comparePrevPage()"' + (diffRes.hasPrevPage ? '' : ' disabled') + '>&#8592; Previous 3,500</button>' +
+      '<button class="btn-sm" onclick="compareNextPage()"' + (diffRes.hasNextPage ? '' : ' disabled') + '>Next 3,500 &#8594;</button>';
+  }
 
   tb.innerHTML = 
     '<span class="exec-stat">Trace 1: ' + escapeHtml(CompareState.file1Name) + ' (' + m1.allCalls.length + ' steps)</span>' +
     '<span class="exec-stat">Trace 2: ' + escapeHtml(CompareState.file2Name) + ' (' + m2.allCalls.length + ' steps)</span>' +
-    '<span class="exec-stat">Aligned Steps: ' + aligned.length + '</span>' +
+    '<span class="exec-stat">Aligned Steps (this page): ' + aligned.length + '</span>' +
     '<span class="exec-stat" style="color:var(--yellow)">Deviations/Inserts: ' + diffs + '</span>' +
+    '<span class="exec-stat" style="color:var(--orange)">Code Drift (same step, different code): ' + codeDrifts + '</span>' +
+    pageControls +
     filterButton +
     '<span class="exec-stat" id="comparePerf">Ready</span>';
+
+  if (diffRes.truncated) {
+    var pnote = document.createElement('div');
+    pnote.style.cssText = 'font-size:10px;color:var(--dim);padding:2px 4px 12px;';
+    pnote.textContent = 'This trace pair exceeds the 3,500-step comparison window and is being compared page by page. Each page is aligned independently, so a deviation reported very close to the start or end of a page can be an artifact of the page boundary rather than a genuine divergence -- check the adjacent page if a boundary-area finding looks suspicious.';
+    root.appendChild(pnote);
+  }
 
   if (div) {
     var summary = document.createElement('div');
@@ -3959,7 +4188,7 @@ function renderCompareView(m1, m2, diffRes) {
 
     summary.innerHTML = 
       '<div style="font-weight:700; font-size:13px; color:var(--red); display:flex; align-items:center; gap:8px;">' +
-        '&#9888; Execution Path Deviation Identified at Step #' + (div.divergenceIndex + 1) +
+        '&#9888; Execution Path Deviation Identified at Step #' + (pageOffset + div.divergenceIndex + 1) +
       '</div>' +
       '<div style="margin-top:6px; font-size:12px; line-height:1.5;">' +
         '<strong>Last Synchronous Step:</strong> ' + escapeHtml(lastStepName) + '<br>' +
@@ -3969,23 +4198,38 @@ function renderCompareView(m1, m2, diffRes) {
     if (div.bindDifferences.length) {
       var bBox = document.createElement('div');
       bBox.className = 'diff-diag-box';
-      bBox.innerHTML = '<strong>Bind Data Discrepancy:</strong><br>' + div.bindDifferences.map(escapeHtml).join('<br>');
+      bBox.innerHTML = '<strong>Bind Data Discrepancy (likely DATA cause):</strong><br>' + div.bindDifferences.map(escapeHtml).join('<br>');
       summary.appendChild(bBox);
     }
 
     if (div.variableDifferences.length) {
       var vBox = document.createElement('div');
       vBox.className = 'diff-diag-box';
-      vBox.innerHTML = '<strong>State &amp; Field Variable Differences:</strong><br>' + div.variableDifferences.map(escapeHtml).join('<br>');
+      vBox.innerHTML = '<strong>State &amp; Field Variable Differences (likely DATA cause):</strong><br>' + div.variableDifferences.map(escapeHtml).join('<br>');
       summary.appendChild(vBox);
     }
 
+    if (div.exclusiveCodePath) {
+      var cBox = document.createElement('div');
+      cBox.className = 'diff-diag-box';
+      cBox.style.borderLeftColor = 'var(--orange)';
+      cBox.innerHTML = '<strong>Exclusive Code Path (likely CODE or CONFIGURATION cause):</strong><br>The step at the divergence point runs a function/program/SQL shape that does not appear anywhere in ' + escapeHtml(div.exclusiveCodePath === 'Trace 1' ? 'Trace 2' : 'Trace 1') + '.';
+      summary.appendChild(cBox);
+    }
+
     root.appendChild(summary);
+  } else if (codeDrifts > 0) {
+    var driftBox = document.createElement('div');
+    driftBox.className = 'diff-summary-card';
+    driftBox.style.borderLeftColor = 'var(--orange)';
+    driftBox.innerHTML = '<div style="font-weight:700; color:var(--orange);">&#9888; Execution path matches step-for-step, but ' + codeDrifts + ' step(s) show different captured source code.</div>' +
+      '<div style="margin-top:6px; font-size:12px; color:var(--text);">This usually points to a CODE/patch-version difference between the two environments even though the same functions ran in the same order with the same data. Open a highlighted row below to compare the exact captured code on each side.</div>';
+    root.appendChild(driftBox);
   } else {
     var cleanBox = document.createElement('div');
     cleanBox.className = 'diff-summary-card';
     cleanBox.style.borderLeftColor = 'var(--green)';
-    cleanBox.innerHTML = '<div style="font-weight:700; color:var(--green);">&#10003; Paths are Identical: Both traces followed identical execution logic.</div>';
+    cleanBox.innerHTML = '<div style="font-weight:700; color:var(--green);">&#10003; Paths are Identical: Both traces followed identical execution logic with matching captured source code.</div>';
     root.appendChild(cleanBox);
   }
 
@@ -4023,34 +4267,40 @@ function renderCompareView(m1, m2, diffRes) {
 
   aligned.forEach(function(row, idx) {
     var isDivergenceLine = div && div.divergenceIndex === idx;
-    var isDeviation = isDivergenceLine || row.type !== 'MATCH';
+    var isCodeDrift = row.type === 'MATCH' && !!row.codeDiffers;
+    var isDeviation = isDivergenceLine || row.type !== 'MATCH' || isCodeDrift;
 
     // Skip creating a DOM node at all for matched rows when the filter is active, rather than
     // creating every row up front and hiding the unwanted ones with display:none. For a large
     // aligned table (which is exactly what raising the step cap makes more common) this avoids
-    // building, escaping, and inserting thousands of nodes the user never sees.
-    if (row.type === 'MATCH' && CompareState.hideMatched) return;
+    // building, escaping, and inserting thousands of nodes the user never sees. Code-drift rows
+    // stay visible even in "Deviations Only" mode -- they are a genuine finding, not noise.
+    if (row.type === 'MATCH' && !isCodeDrift && CompareState.hideMatched) return;
 
     var r = document.createElement('div');
     var rowCls = isDivergenceLine 
       ? 'diff-diverge' 
-      : row.type === 'MATCH' 
-        ? 'diff-match' 
-        : row.type === 'ADDED' 
-          ? 'diff-added' 
-          : 'diff-removed';
+      : isCodeDrift
+        ? 'diff-codedrift'
+        : row.type === 'MATCH' 
+          ? 'diff-match' 
+          : row.type === 'ADDED' 
+            ? 'diff-added' 
+            : 'diff-removed';
 
     r.className = 'diff-grid ' + rowCls;
 
     var badgeCls = isDivergenceLine 
       ? 'diff-badge-deviate' 
-      : row.type === 'MATCH' 
-        ? 'diff-badge-match' 
-        : row.type === 'ADDED' 
-          ? 'diff-badge-added' 
-          : 'diff-badge-removed';
+      : isCodeDrift
+        ? 'diff-badge-codedrift'
+        : row.type === 'MATCH' 
+          ? 'diff-badge-match' 
+          : row.type === 'ADDED' 
+            ? 'diff-badge-added' 
+            : 'diff-badge-removed';
 
-    var badgeText = isDivergenceLine ? 'DIVERGE' : row.type;
+    var badgeText = isDivergenceLine ? 'DIVERGE' : isCodeDrift ? 'CODE' : row.type;
 
     var s1Text = formatStepCell(row.step1, badgeCls, badgeText, isDeviation);
     var s2Text = formatStepCell(row.step2, badgeCls, badgeText, isDeviation);
