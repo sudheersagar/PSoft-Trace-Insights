@@ -140,6 +140,8 @@ No web server, build step, Node.js runtime, or external dependencies required.</
 </table>
 
 <hr />
-
+<h1 align="center" style="color: #58a6ff;">
+  <strong>⭐ If you find my projects useful, consider giving them a star! ⭐</strong>
+</h1>
 <h2>License</h2>
 <p>MIT License &copy; 2026 PeopleSoft Trace Insights</p>
