@@ -1769,6 +1769,27 @@
             G.meta.durationUnit = 's';
           }
         
+          G.rawDbErrors = scanRawDatabaseErrors(lines);
+          /* Backfill SQL error metadata from raw trace evidence. This covers
+           * traces where the error is embedded in Bind-N text or appears as a
+           * standalone diagnostic line without ERR rtncd=... */
+          (G.rawDbErrors || []).forEach(function(err) {
+            var target = null, best = Infinity;
+            (G.sql || []).forEach(function(s) {
+              var d = Math.abs((s.lineNumber || 0) - err.line);
+              if (d <= 40 && d < best) { target = s; best = d; }
+            });
+            if (target && !target.isErr) {
+              target.isErr = true;
+              target.eCode = err.code;
+              target.eMsg = err.message;
+              target.errorLine = err.line;
+              target.errorSource = err.source;
+              target.errorRaw = err.raw;
+              target.errorDetails = err.raw;
+            }
+          });
+
           collectTransactionMarkers(lines);
           buildAgg();
           reconcileMissingTraceFlags();
@@ -1887,6 +1908,52 @@
         }
         
         // ── SQL Parser Processor ──────────────────────────────────────────
+        /* Extract DB diagnostics that PeopleSoft may serialize inside a Bind-N value.
+         * Returns normalized SQL error metadata without requiring an ERR rtncd record. */
+        function extractEmbeddedDbError(value) {
+          /*
+           * PeopleSoft traces do not always emit database failures as a clean
+           *   ERR rtncd=... msg=...
+           * record. Depending on the trace path, the diagnostic can be embedded
+           * in Bind-N, hSQL error, ErrorReturn->, Failed SQL stmt, or another
+           * diagnostic payload. Keep this parser database-neutral and let
+           * classifyDbError() map the recognized code/message to a category.
+           */
+          var raw = String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
+          if (!raw) return null;
+
+          var m = raw.match(/\bORA-(\d{5})\b\s*:?\s*(.*?)(?=\s+ORA-\d{5}\b|\s+MSG\s+\d+\b|\s+SQL0*\d+N\b|$)/i);
+          if (m) {
+            var n = parseInt(m[1], 10);
+            return { code: -n, message: ('ORA-' + m[1] + ': ' + m[2]).trim(), details: raw, dbms: 'Oracle' };
+          }
+
+          m = raw.match(/\bMSG\s+(\d+)\b(?:\s*[:,-]?\s*)(.*?)(?=\s+ORA-\d{5}\b|\s+MSG\s+\d+\b|\s+SQL0*\d+N\b|$)/i);
+          if (m) return { code: -parseInt(m[1],10), message: ('Msg ' + m[1] + ': ' + m[2]).trim(), details: raw, dbms: 'SQL Server' };
+
+          m = raw.match(/\bSQL0*(\d+)N\b(?:\s*[:,-]?\s*)(.*?)(?=\s+ORA-\d{5}\b|\s+MSG\s+\d+\b|\s+SQL0*\d+N\b|$)/i);
+          if (m) return { code: -parseInt(m[1],10), message: ('SQL' + String(m[1]).padStart(4,'0') + 'N: ' + m[2]).trim(), details: raw, dbms: 'DB2' };
+
+          return null;
+        }
+
+        /* Scan the raw trace for diagnostics even when no SQL statement object
+         * was successfully finalized around the error line. Explicit database
+         * error records are preferred over generic wrapper/noise records. */
+        function scanRawDatabaseErrors(lines) {
+          var out = [];
+          var genericRe = /\b(?:ERR\s+rtncd|ErrorReturn->|hSQL error|Failed SQL stmt)\b/i;
+          (lines || []).forEach(function(line, idx) {
+            var embedded = extractEmbeddedDbError(line);
+            if (embedded) {
+              out.push({ line: idx + 1, code: embedded.code, message: embedded.message, raw: line.trim(), source: 'Embedded database diagnostic', dbms: embedded.dbms || '' });
+            } else if (genericRe.test(line)) {
+              out.push({ line: idx + 1, code: null, message: line.trim(), raw: line.trim(), source: 'Database diagnostic wrapper', dbms: '' });
+            }
+          });
+          return out;
+        }
+
         function SQLProc() {
           this.cursors = Object.create(null);
           this.rV = /(COM Stmt=)|(Bind-\d+)|(Fetch)|(EXE)|(EPO)|(ERR)/;
@@ -1937,12 +2004,31 @@
             return;
           }
           if ((m = this.rB.exec(line))) {
+            /*
+             * PeopleSoft AE SQL/PeopleCode traces can carry the database error
+             * inside a Bind-N value instead of emitting the traditional
+             *   ERR rtncd=... msg=...
+             * record.  Example: Bind-4 value= - ORA-00001: unique constraint ...
+             * Do NOT treat that diagnostic payload as an ordinary application bind.
+             */
+            var bindVal = m[4] == null ? '' : String(m[4]);
+            var embeddedErr = extractEmbeddedDbError(bindVal);
+            if (embeddedErr) {
+              state.cur.isErr = true;
+              state.cur.eCode = embeddedErr.code;
+              state.cur.eMsg = embeddedErr.message;
+              state.cur.errorLine = ln;
+              state.cur.errorSource = 'Embedded database error in Bind-' + m[1];
+              state.cur.errorRaw = line;
+              state.cur.errorDetails = embeddedErr.details || embeddedErr.message;
+              return;
+            }
             if (!state.cur.bo) {
               state.cur.curB = [];
               state.cur.runs.push({ binds: state.cur.curB, line:ln });
               state.cur.bo = true;
             }
-            state.cur.curB.push({ idx:+m[1], typ:+m[2], len:+m[3], val:m[4] });
+            state.cur.curB.push({ idx:+m[1], typ:+m[2], len:+m[3], val:bindVal });
             return;
           }
           if ((m = this.rEP.exec(line))) {
@@ -1956,6 +2042,19 @@
             state.cur.eCode = +m[1];
             state.cur.eMsg = m[2];
             state.cur.errorLine = ln;
+            state.cur.errorSource = 'ERR rtncd diagnostic';
+            state.cur.errorRaw = line;
+            state.cur.errorDetails = m[2];
+
+            /* Some trace writers place ORA-/MSG/SQLxxxxN inside the message
+             * rather than exposing a separately parseable error record. */
+            var explicitErr = extractEmbeddedDbError(m[2]);
+            if (explicitErr) {
+              state.cur.eCode = explicitErr.code;
+              state.cur.eMsg = explicitErr.message;
+              state.cur.errorDetails = explicitErr.details;
+              state.cur.errorSource = 'Embedded database error in ERR message';
+            }
           }
         };
         SQLProc.prototype.done = function() {
@@ -1971,7 +2070,8 @@
             text: text.trim(), lineNumber: ln, rc: rc, ctx: ctx, cursorId: cursorId || '',
             ex: 0, ft: 0, fc: 0, bo: true, isErr: false, ePos: null, eCode: null,
             eMsg: null, curB: [], runs: [], fetches: [], parentCall: null,
-            bufferData: null, sqlId: '', comLine: ln, executeLine: 0, errorLine: 0
+            bufferData: null, sqlId: '', comLine: ln, executeLine: 0, errorLine: 0,
+            errorSource: '', errorRaw: '', errorDetails: ''
           };
           s.runs.push({ binds:s.curB, line:ln });
           s.type = sqlType(s.text);
@@ -3053,13 +3153,30 @@
               type: 'SQL_ERROR',
               confidence: e.eMsg ? 95 : 85,
               title: 'Database Execution Failure (' + cat + ')',
-              symptom: sqlErrors.length + ' SQL statement(s) encountered severe DB errors. First failure at line ' + e.lineNumber + (e.eMsg ? ': ' + e.eMsg : (' [RC=' + e.rc + ']')) + '.',
-              fix: 'Examine statement binds and table structure for constraint conflicts, missing tables, or mismatched column lengths in Application Designer.',
+              symptom: sqlErrors.length + ' SQL statement(s) encountered severe DB errors. First failure at line ' + e.lineNumber + (e.eMsg ? ': ' + e.eMsg : (' [RC=' + e.rc + ']')) + (e.errorLine ? ' (error evidence at trace line ' + e.errorLine + ')' : '') + '.',
+              fix: cat === 'UNIQUE_CONSTRAINT' ? 'Duplicate key detected. Review the INSERT/MERGE key values and the existing PS_PRT_BI_TAO row for this process/business-unit/project/activity combination before rerunning the step.' : 'Examine statement binds and table structure for constraint conflicts, missing tables, or mismatched column lengths in Application Designer.',
               evidenceLines: [e.lineNumber, e.errorLine].filter(Boolean),
               sql: e
             });
           }
         
+          var rawOnlyErrors = (G.rawDbErrors || []).filter(function(r) {
+            return !(st.some(function(s) { return s.errorLine === r.line; }));
+          });
+          if (rawOnlyErrors.length) {
+            var re = rawOnlyErrors[0];
+            items.push({
+              severity: 'critical',
+              type: 'RAW_DB_ERROR',
+              confidence: re.code != null ? 99 : 90,
+              title: 'Database Error Found in Raw Trace',
+              symptom: (re.message || 'Database error detected') + ' at trace line ' + re.line + '.',
+              fix: 'Review the raw error evidence and the SQL/bind activity immediately preceding this line. The trace format may have serialized the error outside the standard ERR rtncd record.',
+              evidenceLines: [re.line],
+              rawError: re
+            });
+          }
+
           if (flags.TraceSQL !== null && (flags.TraceSQL & 2) === 0 && st.length > 0) {
             items.push({
               severity: 'warning',
@@ -3808,7 +3925,15 @@
           if (sql.curB && sql.curB.length) sql.curB.forEach(function(b) { body.push('#' + b.idx + ' [' + (b.typeStr || 'type=' + b.typ) + '] len=' + b.len + ' = <span class="str">' + escapeHtml(decodeHtmlEntities(b.val)) + '</span><br>'); });
           else body.push('<span class="val" style="color:var(--dim)">No binds</span>');
           if (sql.variableLinks && sql.variableLinks.length) body.push('<br><span class="lbl">Variable → Bind Correlation</span><br>' + sql.variableLinks.map(function(v){return '#' + v.bindIndex + ' ← ' + escapeHtml(v.variable) + ' = ' + escapeHtml(v.value) + ' [' + v.confidence + ', ' + v.distance + ' lines before SQL]';}).join('<br>'));
-          if (sql.isErr) body.push('<br><span class="lbl err">ERROR</span>Category: ' + escapeHtml(classifyDbError(sql) || 'DATABASE_ERROR') + '<br>Position: ' + sql.ePos + '<br>Code: ' + sql.eCode + '<br>Msg: ' + escapeHtml(sql.eMsg));
+          if (sql.isErr) {
+            body.push('<br><span class="lbl err">ERROR DETAILS</span>');
+            body.push('<strong style="color:var(--red)">' + escapeHtml(classifyDbError(sql) || 'DATABASE_ERROR') + '</strong>');
+            body.push('<br>Code: ' + escapeHtml(sql.eCode == null ? '—' : sql.eCode));
+            body.push('<br>Message: ' + escapeHtml(sql.eMsg || 'Database error detected in trace'));
+            if (sql.errorLine) body.push('<br>Error evidence line: ' + sql.errorLine);
+            if (sql.errorSource) body.push('<br>Source: ' + escapeHtml(sql.errorSource));
+            if (sql.errorRaw) body.push('<br><span class="lbl">Raw Error Evidence</span><pre class="sql-block">' + escapeHtml(sql.errorRaw) + '</pre>');
+          }
           openDrawer('SQL Details', body.join('<br>'));
         }
         
@@ -3891,6 +4016,7 @@
             if(hit) html+=' • '+escapeHtml(hit.type)+' • '+escapeHtml(hit.cursorId||'');
             if(raw) html+='<div style="margin-top:7px"><span class="lbl">Raw trace line</span><pre class="sql-block">'+escapeHtml(raw)+'</pre></div>';
             if(hit && hit.text && hit.text !== raw) html+='<div style="margin-top:7px"><span class="lbl">Parsed SQL</span><pre class="sql-block">'+escapeHtml(hit.text)+'</pre></div>';
+            if(hit && hit.isErr) html+='<div style="margin-top:7px;padding:10px;border-left:3px solid var(--red);background:rgba(248,113,113,.08)"><span class="lbl err">Database Error</span><strong>'+escapeHtml(classifyDbError(hit)||'DATABASE_ERROR')+'</strong><br>Code: '+escapeHtml(hit.eCode==null?'—':hit.eCode)+'<br>Message: '+escapeHtml(hit.eMsg||'')+(hit.errorSource?'<br>Source: '+escapeHtml(hit.errorSource):'')+(hit.errorRaw?'<pre class="sql-block" style="margin-top:7px">'+escapeHtml(hit.errorRaw)+'</pre>':'')+'</div>';
             if(!raw && !hit) html+='<div style="color:var(--dim);margin-top:7px">The raw trace line is not available in this analysis.</div>';
             html+='</div>';
           });
