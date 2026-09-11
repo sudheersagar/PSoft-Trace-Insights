@@ -1606,7 +1606,16 @@
           var hasAETiming = /Application Engine Statement Timing Trace|\bDur(?:ation)?\s*=\s*[0-9]+(?:\.[0-9]+)?/i.test(sampleAll);
           var hasAETerminator = /(?:^|\n)\s*\/(?:\s*(?:--.*)?)?$/m.test(sampleAll);
           var hasAEBatchMarkers = /\b(?:AE_|Application Engine|Do Select|Do While|Do When|Do Until|Call Section|PeopleCode)\b/i.test(sampleAll);
-          var isCobol = /PeopleSoft Batch Timings Report/i.test(first) || /\bCOM Stmt=.*\b(?:EXE|Fetch)\b/i.test(sampleHead) && /CEX Stmt=|GETSTMT Stmt=/.test(sampleHead);
+          // A self-declared "AE SQL/PeopleCode Trace" or "SQL Trace" banner on the trace's own
+          // first line is authoritative and must never be overridden by the COBOL heuristic below.
+          // Real PeopleSoft-Oracle traces legitimately emit "CEX Stmt=" (a cached-execute reuse of
+          // an already-parsed cursor) alongside ordinary "COM Stmt=...EXE" pairs; that combination
+          // is NOT unique to COBOL batch timing reports, so on a file that already identifies
+          // itself as an AE SQL/PeopleCode trace, a single incidental "CEX Stmt=" line was
+          // previously enough to misclassify the entire file as COBOL SQL and lose all
+          // PeopleCode/exec-path/variable-flow parsing for it.
+          var hasExplicitTraceBanner = /AE SQL\/PeopleCode Trace|SQL Trace/i.test(first);
+          var isCobol = !hasExplicitTraceBanner && (/PeopleSoft Batch Timings Report/i.test(first) || /\bCOM Stmt=.*\b(?:EXE|Fetch)\b/i.test(sampleHead) && /CEX Stmt=|GETSTMT Stmt=/.test(sampleHead));
           var isTRCasTraceSQL = !isCobol && ((ext.endsWith('.trc') || ext.endsWith('.tracesql')) && /AE SQL\/PeopleCode Trace|SQL Trace/i.test(first));
           // Prefer combined SQL/PeopleCode .TRC detection over AET heuristics. A combined trace
           // contains AE step markers but must still retain the generic PeopleCode/stack parsers.
@@ -1649,7 +1658,12 @@
             if (!l) continue;
         
             if (!metaFound.toolsRel) {
-              var mRel = /(?:PeopleTools|Tools\s*Release|PT\s*Version)\s*(?:Release)?\s*[:=]?\s*([0-9]+\.[0-9]+(?:\.[0-9]+)?)/i.exec(l);
+              // Real AE SQL/PeopleCode trace banners commonly stamp the release in parenthesized
+              // form directly after the product name, e.g. "PeopleTools(8.61.22) AE SQL/PeopleCode
+              // Trace ...", which the previous pattern (expecting only ":"/"="/whitespace before
+              // the version) did not match, leaving Tools Release permanently "Not stamped" on
+              // otherwise correctly-parsed traces.
+              var mRel = /(?:PeopleTools|Tools\s*Release|PT\s*Version)\s*(?:Release)?\s*[:=(]?\s*([0-9]+\.[0-9]+(?:\.[0-9]+)?)/i.exec(l);
               if (mRel) metaFound.toolsRel = mRel[1];
             }
         
