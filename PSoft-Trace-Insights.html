@@ -493,6 +493,18 @@
         .var-entry-links { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
         .var-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; border: 1px solid var(--border); color: var(--dim); }
         
+        /* ── Application Engine (.AET) Specific Diagnostics ─────────────── */
+        .aet-card { border-left: 4px solid var(--accent); }
+        .aet-badge { display:inline-flex; align-items:center; gap:5px; padding:3px 8px; border-radius:999px; font-size:9.5px; font-weight:750; color:var(--accent); background:rgba(45,212,191,.10); border:1px solid rgba(45,212,191,.28); }
+        .aet-note { margin-top:10px; padding:8px 10px; border-left:3px solid var(--accent); background:rgba(45,212,191,.05); color:var(--dim); border-radius:4px; font-size:10.5px; line-height:1.45; }
+        .aet-table-wrap { overflow:auto; border:1px solid var(--border); border-radius:7px; }
+        .aet-table { width:100%; border-collapse:collapse; font-size:10.5px; min-width:620px; }
+        .aet-table th { padding:6px 8px; text-align:left; color:var(--dim); background:var(--s2); border-bottom:1px solid var(--border); white-space:nowrap; }
+        .aet-table td { padding:6px 8px; border-bottom:1px solid rgba(125,125,125,.10); vertical-align:top; }
+        .aet-table tr:last-child td { border-bottom:0; }
+        .aet-mono { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+        .aet-sql-full { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:11px; line-height:1.45; white-space:pre-wrap; word-break:break-word; min-width:420px; max-width:900px; max-height:150px; overflow:auto; text-align:left; vertical-align:top; }
+
         /* ── Trace Comparison Diff Styles ──────────────────────────────── */
         /* Compare Paths is intentionally outside #main so normal trace analysis never exposes it. */
         #comparePage {
@@ -972,7 +984,7 @@
             <div id="hdr-r">
                 <button class="btn-sm" onclick="goHome()" title="Return to trace selection">&#127968; Home</button>
                 <button class="btn-sm" id="btnCompareHdr" onclick="openCompareModal()" title="Compare two trace files side-by-side">&#128256; Compare Traces</button>
-                <button class="btn-sm" onclick="exportCSV()" title="Export current trace SQL data">&#128190; CSV</button>
+                <button class="btn-sm" onclick="exportCSV()" title="Export current trace diagnostics (AET includes native step/control records)">&#128190; CSV</button>
                 <button class="btn-sm" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle Light/Dark Theme">&#9728;&#65039; Light</button>
                 <button class="btn-sm" onclick="openHelp()" title="Trace settings and diagnostics help">&#10067; Help</button>
                 <button class="btn-sm" onclick="openReadme()" title="Complete Architectural User Guide">&#128214; Read me</button>
@@ -1022,6 +1034,8 @@
                 <button class="sb" id="s-update" onclick="gSQL('type-update')">UPDATE</button>
                 <button class="sb" id="s-delete" onclick="gSQL('type-delete')">DELETE</button>
                 <button class="sb" id="s-merge" onclick="gSQL('type-merge')">MERGE</button>
+                <button class="sb" id="s-truncate" onclick="gSQL('type-truncate')">TRUNCATE</button>
+                <button class="sb" id="s-recstats" onclick="gSQL('type-recstats')">RECSTATS</button>
             </div>
             <div id="sb">
                 <input type="text" id="si" placeholder="Search statements... (Ctrl+F to open, Esc to close)" oninput="doSearch()" onkeydown="if(event.key==='Escape')closeSearch()" />
@@ -1754,6 +1768,94 @@
           diagActiveFilter = 'ALL';
         }
         
+        // ── Native .AET Trace Profile ──────────────────────────────────────
+        // A standalone .AET is an Application Engine action/step trace. Unlike a combined
+        // .trc/.tracesql capture, it does not reliably emit the >>>/<<< duration records used
+        // by the online execution parser. Keep the .AET-specific facts in their own model so
+        // the report can expose what the file actually contains without changing generic trace
+        // semantics. Durations derived from timestamp boundaries are explicitly marked inferred.
+        function buildAETTraceProfile(lines) {
+          var out = {
+            release:'', database:'', processInstance:'', program:'', resumedAfterStep:'',
+            firstTimestamp:null, lastTimestamp:null, elapsedSeconds:null,
+            actionCount:0, actionTypeCounts:{}, programs:[], sections:[], maxDepth:0,
+            sqlActions:0, peopleCodeActions:0, callSections:0, logMessages:0,
+            rowEvents:0, rowsAffectedTotal:0, rowsAffectedNonZero:0,
+            commits:0, rollbacks:0, checkpoints:0,
+            skippedSteps:0, brokenLoops:0, loopIterations:0,
+            tempDedicating:0, tempUsageChanges:0, tempReleases:0,
+            tempLocks:0, tempInherits:0, tempMarkedNotInUse:0, tempUnlocks:0, tempTables:[],
+            updateStatsIgnored:0, status:'Unknown', firstAction:null, lastAction:null
+          };
+          var programSet=Object.create(null), sectionSet=Object.create(null), tempSet=Object.create(null);
+          var tsRx=/^--\s+(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d+)/;
+          var stepRx=/^--\s+(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d+\.\d+)\s+(\.*)\(([^.()]+)\.([^.()]+)\.([^.()]+)\)\s*\(([^)]*)\)/;
+          var resumeRx=/Process\s+(\d+)\s+resumed after step\s+(.+)$/i;
+          var endRx=/Application Engine program\s+(\S+)\s+ended normally/i;
+          var abnormalRx=/Application Engine program\s+(\S+)\s+terminated abnormally/i;
+          var rowRx=/Row\(s\) affected:\s*(\d+)/i;
+          var iterRx=/Iteration\s+(\d+)\s+of\s+(.+?)\s+loop/i;
+          function toSec(date,time){
+            var m=/^(\d{2}):(\d{2}):(\d{2})\.(\d+)$/.exec(time||'');
+            if(!m)return null;
+            return (+m[1])*3600+(+m[2])*60+(+m[3])+parseFloat('0.'+m[4]);
+          }
+          function addTs(date,time){
+            var v=toSec(date,time); if(v==null)return;
+            var key=date+'T'+time;
+            if(!out.firstTimestamp || key<out.firstTimestamp.raw) out.firstTimestamp={raw:key,date:date,time:time,sec:v};
+            if(!out.lastTimestamp || key>out.lastTimestamp.raw) out.lastTimestamp={raw:key,date:date,time:time,sec:v};
+          }
+          (lines||[]).forEach(function(raw,i){
+            var line=String(raw||''), trim=line.trim(), tm=tsRx.exec(line);
+            if(tm)addTs(tm[1],tm[2]);
+            if(i===0){
+              var rm=/PeopleTools\s+([0-9.]+).*Application Engine/i.exec(line); if(rm)out.release=rm[1];
+              var dm=/Database:\s*([^\s(]+)(?:\s*\(([^)]+)\))?/i.exec(line); if(dm)out.database=dm[1]+(dm[2]?' ('+dm[2]+')':'');
+            }
+            var sm=stepRx.exec(line);
+            if(sm){
+              var action=String(sm[7]||'').trim(), program=sm[4], section=sm[5], step=sm[6], indent=(sm[3]||'').length;
+              var rec={line:i+1,program:program,section:section,step:step,action:action,depth:indent,timestamp:sm[1]+' '+sm[2]};
+              out.actionCount++; out.actionTypeCounts[action]=(out.actionTypeCounts[action]||0)+1;
+              if(!out.firstAction)out.firstAction=rec; out.lastAction=rec;
+              programSet[program]=1; sectionSet[program+'.'+section]=1; if(indent>out.maxDepth)out.maxDepth=indent;
+              if(/^SQL$/i.test(action))out.sqlActions++;
+              else if(/^PeopleCode$/i.test(action))out.peopleCodeActions++;
+              else if(/^Call Section\b/i.test(action))out.callSections++;
+              else if(/^Log Message$/i.test(action))out.logMessages++;
+            }
+            var rr=rowRx.exec(line); if(rr){out.rowEvents++; var n=Number(rr[1])||0;out.rowsAffectedTotal+=n;if(n>0)out.rowsAffectedNonZero++;}
+            var rv=resumeRx.exec(trim); if(rv){out.processInstance=rv[1];out.resumedAfterStep=rv[2];}
+            var em=endRx.exec(trim); if(em){out.program=em[1];out.status='Ended normally';}
+            var am=abnormalRx.exec(trim); if(am){out.program=am[1];out.status='Terminated abnormally';}
+            if(/^COMMIT$/i.test(trim))out.commits++;
+            if(/^ROLLBACK$/i.test(trim))out.rollbacks++;
+            if(/^Restart Data CheckPointed$/i.test(trim))out.checkpoints++;
+            if(/Program Skipping Step due to non-zero return code from PeopleCode/i.test(trim))out.skippedSteps++;
+            if(/Program Breaking Loop due to non-zero return code from PeopleCode/i.test(trim))out.brokenLoops++;
+            var im=iterRx.exec(trim);if(im)out.loopIterations=Math.max(out.loopIterations,Number(im[1])||0);
+            if(/Dedicating temporary tables for\s+([^:]+):/i.test(trim)){
+              out.tempDedicating++; var dm2=/Dedicating temporary tables for\s+([^:]+):/i.exec(trim); if(dm2)tempSet[dm2[1]]=1;
+            }
+            if(/Temporary table usage changes:/i.test(trim))out.tempUsageChanges++;
+            if(/Releasing temporary tables that have fallen out of scope:/i.test(trim))out.tempReleases++;
+            if(/Instance\s+\d+\s+of\s+\S+\s+locked\b/i.test(trim)){out.tempLocks++;var lm=/Instance\s+\d+\s+of\s+(\S+)\s+locked\b/i.exec(trim);if(lm)tempSet[lm[1]]=1;}
+            if(/Instance\s+\d+\s+of\s+\S+\s+inherited\b/i.test(trim)){out.tempInherits++;var im2=/Instance\s+\d+\s+of\s+(\S+)\s+inherited\b/i.exec(trim);if(im2)tempSet[im2[1]]=1;}
+            if(/marked as not in use/i.test(trim))out.tempMarkedNotInUse++;
+            if(/Instance\s+\d+\s+of\s+\S+\s+unlocked\b/i.test(trim)){out.tempUnlocks++;var um=/Instance\s+\d+\s+of\s+(\S+)\s+unlocked\b/i.exec(trim);if(um)tempSet[um[1]]=1;}
+            if(/UpdateStats ignored - COMMIT required/i.test(trim))out.updateStatsIgnored++;
+          });
+          if(out.firstTimestamp&&out.lastTimestamp){
+            var delta=out.lastTimestamp.sec-out.firstTimestamp.sec;
+            if(delta<0)delta+=24*3600;
+            out.elapsedSeconds=delta;
+          }
+          out.program=out.program || (out.firstAction&&out.firstAction.program) || '';
+          out.programs=Object.keys(programSet).sort(); out.sections=Object.keys(sectionSet).sort(); out.tempTables=Object.keys(tempSet).sort();
+          return out;
+        }
+
         // ── Shared Post-Parse Finalization ──────────────────────────────────
         // Both the main parse() entry point and the sandboxed parseTraceToModel()
         // used by Compare Trace must run the identical enrichment pipeline against
@@ -1791,8 +1893,16 @@
           G.meta.durationUnit = 's';
 
           collectTransactionMarkers(lines);
+          if (isAET && G.meta.fileExtension === 'aet') G.ae.aetProfile = buildAETTraceProfile(lines);
           buildAgg();
           auditParseCoverage(lines, isAET || isAELog);
+          // Purely additive: parses the trailing "PeopleSoft Application Engine Timings" report
+          // when present (genuine .AET files, or a .trc with TraceAE 128/256 appended output) and
+          // is a no-op for every other file. Runs before reconcileMissingTraceFlags() so its
+          // authoritative, PeopleTools-printed flag values are already in place and that
+          // function's null-guards leave them untouched rather than being overwritten by inference.
+          G.ae.timingsFooter = parseAETTimingsFooter(lines);
+          applyAETimingsFooterToModel(G.ae.timingsFooter);
           reconcileMissingTraceFlags();
           improveSQLMetadata();
           enrichVariableFlow();
@@ -2108,6 +2218,8 @@
           if (/^DELETE\b/.test(u)) return 'DELETE';
           if (/^INSERT\b/.test(u)) return 'INSERT';
           if (/^MERGE\b/.test(u)) return 'MERGE';
+          if (/^TRUNCATE\b/.test(u)) return 'TRUNCATE';
+          if (/^RECSTATS\b/.test(u)) return 'RECSTATS';
           // A CTE starts with WITH but the actual DML may be SELECT/INSERT/UPDATE/DELETE/MERGE.
           // Use top-level SQL tokens so SELECT inside a CTE body does not incorrectly classify
           // an outer INSERT/UPDATE/DELETE.
@@ -2141,6 +2253,8 @@
           else if (type === 'INSERT') rx = /\bINTO\s+([\s\S]*?)(?=\s+VALUES\b|\s+SELECT\b|$)/i;
           else if (type === 'DELETE') rx = /\bDELETE\s+FROM\s+([\s\S]*?)(?=\s+WHERE\b|$)/i;
           else if (type === 'MERGE') rx = /\bMERGE\s+INTO\s+([\s\S]*?)(?=\s+USING\b|$)/i;
+          else if (type === 'TRUNCATE') rx = /\bTRUNCATE\s+(?:TABLE\s+)?([A-Za-z0-9_$#]+(?:\.[A-Za-z0-9_$#]+)?)/i;
+          else if (type === 'RECSTATS') rx = /\bRECSTATS\s+([A-Za-z0-9_$#]+(?:\.[A-Za-z0-9_$#]+)?)/i;
           if (!rx) return '';
           var m = rx.exec(stripAESQLDirectives(t));
           return m ? m[1].trim() : '';
@@ -2148,25 +2262,29 @@
         
         function parseTables(from, type) {
           if (!from) return [];
-          var src = String(from).replace(/\s+/g,' ').trim(), out=[], seen=Object.create(null);
-          var tokenRx = /\(|\)|,|\bJOIN\b|\bFROM\b|\bUSING\b|[A-Z0-9_$#]+(?:\.[A-Z0-9_$#]+)?/ig;
-          var depth=0, expectTable=(type!=='SELECT'), m;
+          var src = String(from).replace(/\s+/g,' ').trim();
+          var out=[], seen=Object.create(null), depth=0, expectTable=true, m;
+          // A SELECT starts with its FROM target. The previous implementation used
+          // expectTable=false for SELECT, so the first table was skipped and only a
+          // later JOIN target could be captured.
+          var tokenRx = /\(|\)|,|\bJOIN\b|\bUSING\b|\bFROM\b|\bAPPLY\b|[A-Z0-9_$#]+(?:\.[A-Z0-9_$#]+)?/ig;
+          var stopWords = /^(SELECT|LATERAL|TABLE|ON|AS|INNER|LEFT|RIGHT|FULL|OUTER|CROSS|NATURAL|USING|WHERE|SET|VALUES|ONLY|FOR)$/i;
           while ((m=tokenRx.exec(src)) !== null) {
-            var tok=m[0];
-            if (tok==='(') { depth++; expectTable = expectTable || false; continue; }
+            var tok=m[0], up=tok.toUpperCase();
+            if (tok==='(') { depth++; continue; }
             if (tok===')') { depth=Math.max(0,depth-1); continue; }
-            var up=tok.toUpperCase();
-            if (up==='JOIN' || up==='FROM' || up==='USING' || tok===',') { if (depth===0) expectTable=true; continue; }
-            if (depth===0 && expectTable && /^[A-Z0-9_$#]+(?:\.[A-Z0-9_$#]+)?$/i.test(tok)) {
-              if (!/^(SELECT|LATERAL|TABLE|ON|AS|INNER|LEFT|RIGHT|FULL|OUTER|CROSS|NATURAL|USING|WHERE|SET|VALUES)$/i.test(tok)) {
-                var name=tok.toUpperCase(); if (!seen[name]) { seen[name]=1; out.push(tok); }
-                expectTable=false;
-              }
+            if (depth!==0) continue;
+            if (up==='JOIN' || up==='APPLY' || up==='USING' || tok===',') { expectTable=true; continue; }
+            if (!expectTable || stopWords.test(tok)) continue;
+            if (/^[A-Z0-9_$#]+(?:\.[A-Z0-9_$#]+)?$/i.test(tok)) {
+              var name=tok.toUpperCase();
+              if (!seen[name]) { seen[name]=1; out.push(tok); }
+              expectTable=false;
             }
           }
           if (!out.length) {
             var one=src.match(/^[A-Z0-9_$#]+(?:\.[A-Z0-9_$#]+)?/i);
-            if (one) out.push(one[0]);
+            if (one && !stopWords.test(one[0])) out.push(one[0]);
           }
           return out;
         }
@@ -2386,6 +2504,14 @@
           this.currentStepKey = '';
           this.currentStepAction = '';
           this.currentRows = null;
+          // A native .AET ends its executable trace before the optional PeopleSoft Application Engine
+          // Timings report.  Once the lifecycle end marker is reached, SQL parsing must be hard-stopped
+          // so timing-report rows such as "DELETE PS_xxx" are never mistaken for trace SQL.
+          this.sqlParsingStopped = false;
+          this.aetEndLine = 0;
+          this.rAETNormalEnd = /^\s*--\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d+\s+Application Engine program\s+\S+\s+ended normally\s*$/i;
+          this.rAETAbnormalEnd = /^\s*--\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d+\s+Application Engine program\s+\S+\s+terminated abnormally\s*$/i;
+          this.rAETTimingsHeader = /^\s*PeopleSoft Application Engine Timings\s*$/i;
           this.rStep = /\((Do When|Do While|Do Select|SQL|Do Until|PeopleCode|Call Section|Log Message)\)\s*$/i;
           this.rStepKey = /\(([^.()]+)\.([^.()]+)\.([^.()]+)\)\s*\(([^)]*)\)\s*$/i;
           this.rStepLine = /^\s*--\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d+\s+\.*\(([^.()]+)\.([^.()]+)\.([^.()]+)\)\s*\(([^)]*)\)/i;
@@ -2397,7 +2523,7 @@
         AETSQLProc.prototype.isSQLStart = function(line) {
           var s = String(line || '').trim();
           if (!s || /^--/.test(s)) return false;
-          return /^(?:%SELECT(?:INIT)?\b|%EXECUTE\b|SELECT\b|INSERT\b|UPDATE\b|DELETE\b|MERGE\b|WITH\b)/i.test(s);
+          return /^(?:%SELECT(?:INIT)?\b|%EXECUTE\b|SELECT\b|INSERT\b|UPDATE\b|DELETE\b|MERGE\b|WITH\b|TRUNCATE\b|RECSTATS\b)/i.test(s);
         };
         AETSQLProc.prototype.beginSQL = function(line, ln) {
           if (G.ae && G.ae.quality) G.ae.quality.sqlCandidates++;
@@ -2423,6 +2549,18 @@
         };
         AETSQLProc.prototype.pl = function(line, ln) {
           var raw = String(line || ''), s = raw.trim(), m;
+
+          // IMPORTANT: native .AET SQL ends at the Application Engine lifecycle end marker.
+          // Everything after that belongs to the optional "PeopleSoft Application Engine Timings"
+          // report and is NOT executable trace SQL.  This is a hard boundary, not merely a display
+          // filter, so footer rows like "DELETE PS_MC_RAVE_STAGE2" can never enter G.sql.
+          if (this.sqlParsingStopped) return;
+          if (this.rAETNormalEnd.test(raw) || this.rAETAbnormalEnd.test(raw) || this.rAETTimingsHeader.test(raw)) {
+            if (this.inSQLBlock) this.finishSQL(ln - 1);
+            this.sqlParsingStopped = true;
+            this.aetEndLine = ln;
+            return;
+          }
 
           // Step headers are authoritative context for subsequent SQL blocks. Do this before
           // generic SQL detection because the action name itself can be "SQL" or "Do Select".
@@ -2504,13 +2642,16 @@
           }
         };
         AETSQLProc.prototype.done = function() {
-          if (this.inSQLBlock) this.finishSQL(this.sqlStartLine || 0);
+          // Do not flush a statement at EOF after the lifecycle end marker.  The parser has already
+          // closed the executable AET region at that marker.  EOF flushing is retained only for a
+          // genuinely truncated AET that never emitted an end/timings boundary.
+          if (this.inSQLBlock && !this.sqlParsingStopped) this.finishSQL(this.sqlStartLine || 0);
           if (this.latestStmt) {
             // Some AET variants emit SQL ID/row information after the final slash.
             G.ae.lastSQL = this.latestStmt;
           }
           var counts = {};
-          ['SELECT','INSERT','UPDATE','DELETE','MERGE','OTHER'].forEach(function(k){counts[k]={type:k,count:0,totalTime:0,errors:0,fetches:0,rows:0,avgTime:0,percent:0};});
+          ['SELECT','INSERT','UPDATE','DELETE','MERGE','TRUNCATE','RECSTATS','OTHER'].forEach(function(k){counts[k]={type:k,count:0,totalTime:0,errors:0,fetches:0,rows:0,avgTime:0,percent:0};});
           (G.sql || []).forEach(function(s){ var g=counts[s.type]||counts.OTHER; g.count++; g.totalTime+=s.dur||0; g.errors+=s.isErr?1:0; g.fetches+=s.fc||0; if (s.rowCount != null) g.rows += Number(s.rowCount)||0; });
           var totalSQLTime=(G.sql||[]).reduce(function(a,s){return a+(s.dur||0);},0);
           Object.keys(counts).forEach(function(k){counts[k].avgTime=counts[k].count?counts[k].totalTime/counts[k].count:0;counts[k].percent=totalSQLTime?counts[k].totalTime/totalSQLTime*100:0;});
@@ -2581,6 +2722,176 @@
         };
 
         // ── COBOL Trace Parser ────────────────────────────────────────────
+        // ── Application Engine "Timings" Summary Report Parser ─────────────────────
+        // A genuine PeopleSoft .AET file (or the trailing section PeopleTools appends to a
+        // combined trace when TraceAE bit 128/256 is set) can be this fixed-width "PeopleSoft
+        // Application Engine Timings" report rather than a step-by-step trace: per-SQL-statement
+        // Compile/Execute/Fetch timings, per-step PeopleCode Call/Non-SQL/SQL/Total timings, a
+        // Builtin/Method breakdown, run totals, and the EXACT PeopleTools trace-flag values used
+        // for the run. None of the existing per-line parsers above (SQLProc/StackProc/VarProc/
+        // ExecProc/AETSQLProc/AETExecProc) recognize this report's line shapes at all, so this
+        // parser is purely additive: it is a no-op (returns null) for any file that does not
+        // contain the report, so .trc/.tracesql files without it are completely unaffected.
+        //
+        // Columns are fixed-width but zero-padding is NOT always printed for every stage: rows
+        // grouped under "PeopleCode" report only 2 Count/Time pairs (Execute, Fetch — ad hoc
+        // SQLExec/CreateSQL statements aren't separately "compiled" the way a native AE SQL
+        // action is), while rows under "Application Engine"/"AE Program: X" report the full 3
+        // pairs (Compile, Execute, Fetch). Splitting each line on runs of 2+ spaces cleanly
+        // separates the name field (which may itself contain single spaces, e.g.
+        // "Rowset.Fill MC_RAVE_BU_VW") from the numeric columns; this was verified against the
+        // actual report text, not assumed.
+        function isDashDivider(s) { return /^[- ]+$/.test(s) && /-/.test(s); }
+        function isNumericToken(s) { return /^[0-9]+(?:\.[0-9]+)?$/.test(s); }
+        function splitFixedWidthColumns(line) {
+          return String(line || '').trim().split(/\s{2,}/).map(function(s){ return s.trim(); }).filter(Boolean);
+        }
+        function parseAETTimingsFooter(lines) {
+          var startIdx = -1;
+          // The report is emitted once, at the very end of the file. Scanning backward from the
+          // tail keeps this cheap even on a large combined .trc that happens to carry it.
+          var scanFrom = Math.max(0, (lines || []).length - 4000);
+          for (var i = lines.length - 1; i >= scanFrom; i--) {
+            if (/^\s*PeopleSoft Application Engine Timings\s*$/i.test(String(lines[i] || ''))) { startIdx = i; break; }
+          }
+          if (startIdx === -1) return null;
+
+          var result = {
+            startLine: startIdx + 1,
+            generatedAt: '',
+            sqlGroups: [],
+            peopleCodeSteps: [],
+            peopleCodeGrandTotal: null,
+            builtins: [],
+            totals: {},
+            explicitFlags: {}
+          };
+
+          var dateM = /(\d{4}-\d{2}-\d{2})\s+(\d{2}\.\d{2}\.\d{2})/.exec(String(lines[startIdx + 2] || ''));
+          if (dateM) result.generatedAt = dateM[1] + ' ' + dateM[2].replace(/\./g, ':');
+
+          var state = null; // 'SQL' | 'PCSTEPS' | 'BUILTINS'
+          var sqlGroupByName = Object.create(null);
+          var pcGroupByName = Object.create(null);
+          var currentGroupName = '';
+
+          function getSqlGroup(name) {
+            if (!sqlGroupByName[name]) { sqlGroupByName[name] = { name: name, rows: [], reportedSubtotal: null }; result.sqlGroups.push(sqlGroupByName[name]); }
+            return sqlGroupByName[name];
+          }
+          function getPcGroup(name) {
+            if (!pcGroupByName[name]) { pcGroupByName[name] = { program: name, steps: [] }; result.peopleCodeSteps.push(pcGroupByName[name]); }
+            return pcGroupByName[name];
+          }
+
+          for (var li = startIdx + 1; li < lines.length; li++) {
+            var trimmed = String(lines[li] || '').trim();
+            if (!trimmed) continue;
+            if (isDashDivider(trimmed)) continue;
+
+            var parts = splitFixedWidthColumns(trimmed);
+            if (!parts.length) continue;
+
+            if (/^SQL Statement$/i.test(parts[0])) { state = 'SQL'; currentGroupName = ''; continue; }
+            if (parts.length >= 2 && parts[0] === 'PeopleCode' && parts[1] === 'Count') { state = 'PCSTEPS'; currentGroupName = ''; continue; }
+            if (/^PEOPLECODE Builtin\/Method$/i.test(parts[0])) { state = 'BUILTINS'; currentGroupName = ''; continue; }
+
+            // A bare, number-free single-token line while inside the SQL/PCSTEPS tables is a group
+            // heading ("PeopleCode", "Application Engine", "AE Program: X"). Encountering one in
+            // another state (e.g. the decorative "E x e c u t e" caption before the Builtins
+            // header) is harmless since no further rows get attributed to it before the next real
+            // header line resets state.
+            if (parts.length === 1 && !isNumericToken(parts[0])) {
+              if (state === 'SQL' || state === 'PCSTEPS') currentGroupName = parts[0];
+              continue;
+            }
+
+            if (parts.length === 1 && isNumericToken(parts[0])) {
+              if (state === 'SQL' && currentGroupName) getSqlGroup(currentGroupName).reportedSubtotal = parseFloat(parts[0]);
+              continue;
+            }
+
+            if (state === 'SQL' && parts.length >= 4) {
+              var nums = parts.slice(1);
+              if (nums.every(isNumericToken) && (nums.length % 2 === 1)) {
+                var vals = nums.map(Number);
+                var total = vals[vals.length - 1];
+                var pairVals = vals.slice(0, -1);
+                var pairs = [];
+                for (var pi = 0; pi < pairVals.length; pi += 2) pairs.push({ count: pairVals[pi], time: pairVals[pi + 1] });
+                getSqlGroup(currentGroupName || '(Ungrouped)').rows.push({ name: parts[0], pairs: pairs, total: total });
+              }
+              continue;
+            }
+
+            if (state === 'PCSTEPS') {
+              if (parts.length === 5 && parts.slice(1).every(isNumericToken)) {
+                getPcGroup(currentGroupName || '(Ungrouped)').steps.push({
+                  step: parts[0], callCount: +parts[1], nonSqlTime: +parts[2], sqlTime: +parts[3], totalTime: +parts[4]
+                });
+              } else if (parts.length === 3 && parts.every(isNumericToken)) {
+                result.peopleCodeGrandTotal = { nonSqlTime: +parts[0], sqlTime: +parts[1], totalTime: +parts[2] };
+              }
+              continue;
+            }
+
+            if (state === 'BUILTINS' && parts.length === 3 && isNumericToken(parts[1]) && isNumericToken(parts[2])) {
+              result.builtins.push({ label: parts[0], count: +parts[1], time: +parts[2] });
+              continue;
+            }
+          }
+
+          // Summary totals and explicit trace-flag values are single, unambiguous lines, scanned
+          // independently of the column state machine above so a table-tracking edge case can
+          // never suppress them — arguably the most valuable output of this parser.
+          var footerText = lines.slice(startIdx).join('\n');
+          var m;
+          if ((m = /Total run time\s*:\s*([\d.]+)/i.exec(footerText))) result.totals.runTime = parseFloat(m[1]);
+          if ((m = /Total time in application SQL\s*:\s*([\d.]+)\s+Percent time in application SQL\s*:\s*([\d.]+)%/i.exec(footerText))) { result.totals.sqlTime = parseFloat(m[1]); result.totals.sqlPercent = parseFloat(m[2]); }
+          if ((m = /Total time in PeopleCode\s*:\s*([\d.]+)\s+Percent time in PeopleCode\s*:\s*([\d.]+)%/i.exec(footerText))) { result.totals.peopleCodeTime = parseFloat(m[1]); result.totals.peopleCodePercent = parseFloat(m[2]); }
+          if ((m = /Total time in cache\s*:\s*([\d.]+)\s+Number of calls to cache\s*:\s*(\d+)/i.exec(footerText))) { result.totals.cacheTime = parseFloat(m[1]); result.totals.cacheCalls = parseInt(m[2], 10); }
+
+          var flagLineDefs = [
+            ['TraceSQL', /PeopleTools SQL Trace value:\s*(\d+)\s*\(0x([0-9a-fA-F]+)\)/i],
+            ['TracePC', /PeopleTools PeopleCode Trace value:\s*(\d+)\s*\(0x([0-9a-fA-F]+)\)/i],
+            ['TraceAE', /Application Engine Trace value:\s*(\d+)\s*\(0x([0-9a-fA-F]+)\)/i],
+            ['TraceAEDbFlags', /Application Engine DbFlags value:\s*(\d+)\s*\(0x([0-9a-fA-F]+)\)/i]
+          ];
+          for (var li2 = startIdx; li2 < lines.length; li2++) {
+            var l2 = String(lines[li2] || '');
+            for (var fi = 0; fi < flagLineDefs.length; fi++) {
+              var key = flagLineDefs[fi][0], rx = flagLineDefs[fi][1];
+              if (result.explicitFlags[key]) continue;
+              var fm = rx.exec(l2);
+              if (fm) result.explicitFlags[key] = { value: parseInt(fm[1], 10), hex: fm[2].toUpperCase(), line: li2 + 1, rawLine: l2.trim() };
+            }
+          }
+
+          return result;
+        }
+        // Applies footer-reported trace-flag values onto the live model. Called before
+        // reconcileMissingTraceFlags() so that function's own null-guards naturally leave these
+        // alone; unlike that function's inference, footer values are printed verbatim by
+        // PeopleTools itself and are treated as authoritative even over a header-banner regex
+        // match, since the footer reflects the actual configuration used for this specific run.
+        function applyAETimingsFooterToModel(footer) {
+          if (!footer) return;
+          var explicit = footer.explicitFlags || {};
+          ['TraceSQL', 'TracePC', 'TraceAE', 'TraceAEDbFlags'].forEach(function(key) {
+            var f = explicit[key];
+            if (!f) return;
+            G.traceFlags[key] = f.value;
+            G.traceFlagsExplicit[key] = true;
+            G.traceFlagEvidence[key] = {
+              kind: 'footer-explicit',
+              basis: 'Explicit value printed in the Application Engine Timings summary at the end of the trace file — the definitive, runtime-reported configuration for this run.',
+              line: f.line,
+              rawToken: String(f.value),
+              rawLine: f.rawLine
+            };
+          });
+        }
+
         function CobolSQLProc() { this.cursorMap = {}; this.pending = null; this.rCOM = /COM Stmt=(.*)/; this.rCEX = /CEX Stmt=(.*)/; this.rGET = /GETSTMT Stmt=(.*?), length/; this.rBind = /(Bind-(\d+)|Bind position=(\d+)), type=(.*?), (?:precision=(\d+), scale=(\d+)|length=(\d+)), value=(.*)/; }
         CobolSQLProc.prototype.valid = function(l) { return l && (l.includes('COM Stmt=') || l.includes('Bind-') || l.includes('Bind position') || l.includes(' Fetch') || l.includes(' EXE') || l.includes(' EPO') || l.includes(' ERR') || l.includes(' CEX Stmt=') || l.includes(' GETSTMT Stmt=')); };
         CobolSQLProc.prototype.hdr = function(l) { try { return { time: l.substring(0, 12).trim(), dur: parseFloat(l.substring(26, 33)) || 0, sqlDur: parseFloat(l.substring(36, 43)) || 0, cursor: parseInt(l.substring(47, 53)) || 0, rc: parseInt(l.substring(56, 60)) || 0 }; } catch(e) { return null; } };
@@ -2858,6 +3169,170 @@
         }, true);
         
         // ── Profile Card Component ─────────────────────────────────────────
+        // ── Native .AET Trace Details Card ──────────────────────────────────
+        // This card is shown only for a real .aet extension. It describes the step/action
+        // trace itself and is deliberately separate from the optional PeopleTools Timings
+        // footer card, which is a different report shape.
+        function renderAETTraceDetailsCard() {
+          if (!G.meta || G.meta.fileExtension !== 'aet' || !G.ae || !G.ae.aetProfile) return null;
+          var p = G.ae.aetProfile;
+          var c = card('Application Engine (.AET) Trace Details', 'Native step/action trace profile • values parsed from the uploaded .AET file');
+          c.classList.add('aet-card');
+          var b = c.querySelector('.card-body');
+          var badge = document.createElement('div');
+          badge.innerHTML = '<span class="aet-badge">.AET • APPLICATION ENGINE</span>';
+          b.appendChild(badge);
+          var mg=document.createElement('div');mg.className='meta-grid';
+          var elapsed=p.elapsedSeconds!=null?fmtSec(p.elapsedSeconds)+' (timestamp span; inferred)': '—';
+          [
+            ['PeopleTools Release',p.release||G.meta.toolsRelease||'Not stamped'],
+            ['Database',p.database||G.meta.database||'Not stamped'],
+            ['Process Instance',p.processInstance||'Not detected'],
+            ['Application Engine Program',p.program||G.meta.batchProgram||'Not detected'],
+            ['Trace Status',p.status||'Unknown'],
+            ['Timestamp Span',elapsed],
+            ['Action / Step Headers',formatInt(p.actionCount)],
+            ['Maximum Trace Nesting',formatInt(p.maxDepth)],
+            ['Programs Observed',formatInt(p.programs.length)],
+            ['Sections Observed',formatInt(p.sections.length)],
+            ['SQL Actions',formatInt(p.sqlActions)],
+            ['PeopleCode Actions',formatInt(p.peopleCodeActions)],
+            ['Call Section Actions',formatInt(p.callSections)],
+            ['Log Message Actions',formatInt(p.logMessages)],
+            ['Rows-Affected Events',formatInt(p.rowEvents)],
+            ['Rows Affected Total',formatInt(p.rowsAffectedTotal)],
+            ['Non-Zero Row Events',formatInt(p.rowsAffectedNonZero)],
+            ['COMMIT Markers',formatInt(p.commits)],
+            ['ROLLBACK Markers',formatInt(p.rollbacks)],
+            ['Restart Checkpoints',formatInt(p.checkpoints)],
+            ['Skipped Steps',formatInt(p.skippedSteps)],
+            ['Broken Loops',formatInt(p.brokenLoops)],
+            ['Max Loop Iteration Seen',formatInt(p.loopIterations)],
+            ['Temp-Table Locks',formatInt(p.tempLocks)],
+            ['Temp-Table Inherited',formatInt(p.tempInherits)],
+            ['Temp-Table Unlocks',formatInt(p.tempUnlocks)],
+            ['UpdateStats Ignored',formatInt(p.updateStatsIgnored)]
+          ].forEach(function(x){var m=document.createElement('div');m.className='meta-item';m.innerHTML='<div class="meta-k">'+escapeHtml(x[0])+'</div><div class="meta-v">'+escapeHtml(String(x[1]))+'</div>';mg.appendChild(m);});
+          b.appendChild(mg);
+          var types=Object.keys(p.actionTypeCounts).sort(function(a,b){return p.actionTypeCounts[b]-p.actionTypeCounts[a]||a.localeCompare(b);});
+          if(types.length){
+            var sec=document.createElement('div');sec.style.marginTop='18px';
+            sec.innerHTML='<div style="font-weight:700;font-size:12px;color:var(--accent);margin-bottom:8px;">AET Action Type Distribution</div>';
+            var tbl=document.createElement('div');tbl.className='aet-table-wrap';
+            tbl.innerHTML='<table class="aet-table"><thead><tr><th>Action Type</th><th>Count</th><th>% of Headers</th></tr></thead><tbody>'+types.map(function(k){var pct=p.actionCount?p.actionTypeCounts[k]/p.actionCount*100:0;return '<tr><td>'+escapeHtml(k)+'</td><td class="aet-mono">'+formatInt(p.actionTypeCounts[k])+'</td><td class="aet-mono">'+pct.toFixed(1)+'%</td></tr>';}).join('')+'</tbody></table>';
+            sec.appendChild(tbl);b.appendChild(sec);
+          }
+          if(p.tempTables.length){
+            var ts=document.createElement('div');ts.className='aet-note';ts.innerHTML='<strong>Temporary-table objects observed:</strong> '+p.tempTables.map(escapeHtml).join(', ');b.appendChild(ts);
+          }
+          if(p.resumedAfterStep){var rs=document.createElement('div');rs.className='aet-note';rs.innerHTML='<strong>Restart / resume context:</strong> Process '+escapeHtml(p.processInstance||'—')+' resumed after step <span class="aet-mono">'+escapeHtml(p.resumedAfterStep)+'</span>.';b.appendChild(rs);}
+          var note=document.createElement('div');note.className='aet-note';note.textContent='A standalone .AET records Application Engine step/action sequencing, SQL/PeopleCode action markers, row counts, transaction/checkpoint markers, temporary-table lifecycle messages, and process lifecycle messages. This profile does not reinterpret .trc/.tracesql/.log parsing.';b.appendChild(note);
+          return c;
+        }
+
+        // ── Application Engine "Timings" Summary Card ─────────────────────
+        // Renders only when parseAETTimingsFooter found the report (see finalizeTraceModel).
+        // Shown as an additional dashboard card, never in place of the existing SQL/Execution
+        // Path/Diagnostics views, so this never displaces this tool's own line-by-line analysis —
+        // it supplements it with the authoritative, PeopleTools-generated totals for the run.
+        function renderAETimingsSummaryCard() {
+          var footer = G.ae && G.ae.timingsFooter;
+          if (!footer) return null;
+          var c = card('Application Engine Timings Summary (Reported)', 'Authoritative totals generated by PeopleTools at the end of this run' + (footer.generatedAt ? ' • ' + footer.generatedAt : ''));
+          var b = c.querySelector('.card-body');
+
+          var mg = document.createElement('div'); mg.className = 'meta-grid';
+          var t = footer.totals || {};
+          [
+            ['Total Run Time', t.runTime != null ? fmtSec(t.runTime) : '—'],
+            ['SQL Time', t.sqlTime != null ? fmtSec(t.sqlTime) + (t.sqlPercent != null ? ' (' + t.sqlPercent.toFixed(1) + '%)' : '') : '—'],
+            ['PeopleCode Time', t.peopleCodeTime != null ? fmtSec(t.peopleCodeTime) + (t.peopleCodePercent != null ? ' (' + t.peopleCodePercent.toFixed(1) + '%)' : '') : '—'],
+            ['Cache Time / Calls', t.cacheTime != null ? fmtSec(t.cacheTime) + (t.cacheCalls != null ? ' / ' + t.cacheCalls + ' call(s)' : '') : '—']
+          ].forEach(function(x) {
+            var m = document.createElement('div'); m.className = 'meta-item';
+            m.innerHTML = '<div class="meta-k">' + escapeHtml(x[0]) + '</div><div class="meta-v">' + escapeHtml(x[1]) + '</div>';
+            mg.appendChild(m);
+          });
+          b.appendChild(mg);
+
+          var allSqlRows = [];
+          (footer.sqlGroups || []).forEach(function(g) {
+            g.rows.forEach(function(r) { allSqlRows.push({ group: g.name, name: r.name, pairs: r.pairs, total: r.total }); });
+          });
+          allSqlRows.sort(function(x,y){ return y.total - x.total; });
+          if (allSqlRows.length) {
+            // Stage labels are only asserted when the pair count matches a pattern actually
+            // observed in real report output (PeopleCode-grouped rows: Execute+Fetch only;
+            // Application Engine / AE Program rows: Compile+Execute+Fetch). Any other pair count
+            // falls back to a generic "Metric N" label rather than guessing a stage that could be
+            // wrong for a report variant this wasn't validated against.
+            var sqlLabelsFor = function(groupName, pairCount) {
+              if (/^PeopleCode$/i.test(groupName) && pairCount === 2) return ['Execute', 'Fetch'];
+              if (pairCount === 3) return ['Compile', 'Execute', 'Fetch'];
+              var out = []; for (var i = 0; i < pairCount; i++) out.push('Metric ' + (i + 1));
+              return out;
+            };
+            var sqlSection = document.createElement('div'); sqlSection.style.marginTop = '18px';
+            sqlSection.innerHTML = '<div style="font-weight:700;font-size:12px;color:var(--accent);margin-bottom:8px;">Top SQL Statements (Reported)</div>';
+            var rowsHtml = allSqlRows.slice(0, 15).map(function(r) {
+              var labels = sqlLabelsFor(r.group, r.pairs.length);
+              var breakdown = r.pairs.map(function(p, i) { return escapeHtml(labels[i] || ('Metric ' + (i + 1))) + ': ' + p.count + ' / ' + fmtSec(p.time); }).join(' &bull; ');
+              return '<tr style="border-top:1px solid var(--border);"><td style="padding:5px 8px;color:var(--dim);white-space:nowrap;">' + escapeHtml(r.group) + '</td><td style="padding:5px 8px;">' + escapeHtml(r.name) + '</td><td style="padding:5px 8px;font-size:10.5px;color:var(--dim);white-space:nowrap;">' + breakdown + '</td><td style="padding:5px 8px;text-align:right;font-weight:600;white-space:nowrap;">' + fmtSec(r.total) + '</td></tr>';
+            }).join('');
+            var sqlTbl = document.createElement('div'); sqlTbl.style.overflow = 'auto';
+            sqlTbl.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:11px;"><tr style="color:var(--dim);text-align:left;"><th style="padding:4px 8px;">Group</th><th style="padding:4px 8px;">SQL Statement / Event</th><th style="padding:4px 8px;">Breakdown</th><th style="padding:4px 8px;text-align:right;">Total</th></tr>' + rowsHtml + '</table>';
+            sqlSection.appendChild(sqlTbl);
+            if (allSqlRows.length > 15) {
+              var more = document.createElement('div'); more.style.cssText = 'font-size:10px;color:var(--dim);margin-top:6px;';
+              more.textContent = 'Showing top 15 of ' + allSqlRows.length + ' reported SQL statement/event rows by total time.';
+              sqlSection.appendChild(more);
+            }
+            b.appendChild(sqlSection);
+          }
+
+          var allSteps = [];
+          (footer.peopleCodeSteps || []).forEach(function(g) {
+            g.steps.forEach(function(s) { allSteps.push({ program: g.program, step: s.step, callCount: s.callCount, nonSqlTime: s.nonSqlTime, sqlTime: s.sqlTime, totalTime: s.totalTime }); });
+          });
+          allSteps.sort(function(x,y){ return y.totalTime - x.totalTime; });
+          if (allSteps.length) {
+            var pcSection = document.createElement('div'); pcSection.style.marginTop = '18px';
+            pcSection.innerHTML = '<div style="font-weight:700;font-size:12px;color:var(--accent);margin-bottom:8px;">PeopleCode Step Timings (Reported)</div>';
+            var pcRows = allSteps.map(function(s) {
+              return '<tr style="border-top:1px solid var(--border);"><td style="padding:5px 8px;color:var(--dim);white-space:nowrap;">' + escapeHtml(s.program) + '</td><td style="padding:5px 8px;">' + escapeHtml(s.step) + '</td><td style="padding:5px 8px;text-align:right;">' + s.callCount + '</td><td style="padding:5px 8px;text-align:right;">' + fmtSec(s.nonSqlTime) + '</td><td style="padding:5px 8px;text-align:right;">' + fmtSec(s.sqlTime) + '</td><td style="padding:5px 8px;text-align:right;font-weight:600;">' + fmtSec(s.totalTime) + '</td></tr>';
+            }).join('');
+            var pcTbl = document.createElement('div'); pcTbl.style.overflow = 'auto';
+            pcTbl.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:11px;"><tr style="color:var(--dim);text-align:left;"><th style="padding:4px 8px;">AE Program</th><th style="padding:4px 8px;">Step (Event)</th><th style="padding:4px 8px;text-align:right;">Calls</th><th style="padding:4px 8px;text-align:right;">Non-SQL Time</th><th style="padding:4px 8px;text-align:right;">SQL Time</th><th style="padding:4px 8px;text-align:right;">Total Time</th></tr>' + pcRows + '</table>';
+            pcSection.appendChild(pcTbl);
+            if (footer.peopleCodeGrandTotal) {
+              var gt = footer.peopleCodeGrandTotal;
+              var gtNote = document.createElement('div'); gtNote.style.cssText = 'font-size:10.5px;color:var(--dim);margin-top:6px;';
+              gtNote.textContent = 'Reported grand total — Non-SQL: ' + fmtSec(gt.nonSqlTime) + ', SQL: ' + fmtSec(gt.sqlTime) + ', Total: ' + fmtSec(gt.totalTime) + '.';
+              pcSection.appendChild(gtNote);
+            }
+            b.appendChild(pcSection);
+          }
+
+          if ((footer.builtins || []).length) {
+            var sortedBuiltins = footer.builtins.slice().sort(function(x,y){ return y.time - x.time; });
+            var biSection = document.createElement('div'); biSection.style.marginTop = '18px';
+            biSection.innerHTML = '<div style="font-weight:700;font-size:12px;color:var(--accent);margin-bottom:8px;">PeopleCode Builtin/Method Breakdown (Reported)</div>';
+            var biRows = sortedBuiltins.slice(0, 15).map(function(x) {
+              return '<tr style="border-top:1px solid var(--border);"><td style="padding:5px 8px;">' + escapeHtml(x.label) + '</td><td style="padding:5px 8px;text-align:right;">' + x.count + '</td><td style="padding:5px 8px;text-align:right;font-weight:600;">' + fmtSec(x.time) + '</td></tr>';
+            }).join('');
+            var biTbl = document.createElement('div'); biTbl.style.overflow = 'auto';
+            biTbl.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:11px;"><tr style="color:var(--dim);text-align:left;"><th style="padding:4px 8px;">Type / Method</th><th style="padding:4px 8px;text-align:right;">Execute Count</th><th style="padding:4px 8px;text-align:right;">Time</th></tr>' + biRows + '</table>';
+            biSection.appendChild(biTbl);
+            b.appendChild(biSection);
+          }
+
+          var footNote = document.createElement('div'); footNote.className = 'diag-note'; footNote.style.cssText = 'padding:12px 0 0;';
+          footNote.textContent = "These figures come directly from the PeopleTools-generated Application Engine Timings report embedded in this file, distinct from this tool's own line-by-line trace analysis shown elsewhere.";
+          b.appendChild(footNote);
+
+          return c;
+        }
+
         function renderTraceProfileCard(I) {
           var meta = card('Trace Profile & Parameters', 'Captured system flags and runtime configuration');
           meta.classList.add('trace-profile-card');
@@ -2873,10 +3348,16 @@
               1:'SQL statements',
               2:'Bind variables',
               4:'Connect / disconnect / commit / rollback context',
-              8:'Fetch events'
+              8:'Fetch events',
+              16:'Most other API calls (except SSB)',
+              32:'Set Select Buffers (SSB)',
+              64:'Database API-specific calls',
+              128:'COBOL statement timings',
+              1024:'DB2 z/OS diagnostic messages'
             },
             TracePC: {
               1:'PeopleCode execution',
+              2:'Entire program listing',
               4:'Variable/field assignments and Store events',
               8:'Fetch Field values',
               16:'PeopleCode evaluator stack',
@@ -2917,7 +3398,11 @@
             var html = '<div class="trace-flag-popover" role="tooltip">';
             html += '<div class="tfp-title">' + escapeHtml(type + ' = ' + val + ' (0x' + Number(val).toString(16).toUpperCase() + ')') + '</div>';
         
-            if (explicit && ev) {
+            if (explicit && ev && ev.kind === 'footer-explicit') {
+              html += '<div class="tfp-row"><div class="tfp-k">Source</div><div class="tfp-v">' + escapeHtml(ev.basis) + '</div></div>';
+              html += '<div class="tfp-row"><div class="tfp-k">Report line</div><div class="tfp-v">' + escapeHtml(String(ev.line)) + '</div></div>';
+              html += '<div class="tfp-evidence">' + escapeHtml(ev.rawLine) + '</div>';
+            } else if (explicit && ev) {
               html += '<div class="tfp-row"><div class="tfp-k">Source</div><div class="tfp-v">Explicit value found in the original trace file.</div></div>';
               html += '<div class="tfp-row"><div class="tfp-k">Trace line</div><div class="tfp-v">' + escapeHtml(String(ev.line)) + '</div></div>';
               html += '<div class="tfp-row"><div class="tfp-k">Raw token</div><div class="tfp-v">' + escapeHtml(ev.rawToken) + '</div></div>';
@@ -2938,6 +3423,19 @@
             } else {
               html += 'None';
             }
+            // Bits matched against flagBits never account for the whole value on their own when
+            // the dictionary above is incomplete relative to real PeopleTools output (it mirrors
+            // only what the Help modal documents). Silently dropping unmatched bits would make a
+            // now-authoritative, footer-reported value look like it decodes less than it does, so
+            // surface the leftover explicitly rather than hiding it.
+            var n = Number(val);
+            if (Number.isFinite(n) && n > 0) {
+              var accounted = bits.reduce(function(a,b){ return a + b; }, 0);
+              var remainder = n - accounted;
+              if (remainder > 0) {
+                html += '<div class="tfp-row"><div class="tfp-k">Undocumented</div><div class="tfp-v">Bit value ' + remainder + ' is also set but not decoded in this reference.</div></div>';
+              }
+            }
             html += '</div></div>';
             html += '</div>';
             return html;
@@ -2946,14 +3444,30 @@
           var formatFlag = function(val, type) {
             if (val === null || val === undefined) return '<span style="color:var(--dim)">Not detected</span>';
             var explicit = isExp[type];
-            var tag = explicit 
-              ? ' <span style="font-size:9.5px;color:var(--green);font-weight:700">[Stamped]</span>' 
+            var ev = evidence[type];
+            var tag = explicit
+              ? (ev && ev.kind === 'footer-explicit'
+                  ? ' <span style="font-size:9.5px;color:var(--green);font-weight:700">[Confirmed — AE Timings report]</span>'
+                  : ' <span style="font-size:9.5px;color:var(--green);font-weight:700">[Stamped]</span>')
               : ' <span style="font-size:9.5px;color:var(--accent);font-weight:700">[Inferred]</span>';
             var hex = '0x' + Number(val).toString(16).toUpperCase();
             return '<span class="trace-flag-value" tabindex="0" aria-label="' + escapeHtml(type + ' value ' + val + ', hover for trace evidence') + '">' +
               '<strong>' + escapeHtml(String(val)) + '</strong> (' + hex + ')' + tag +
               buildPopover(val, type) +
               '</span>';
+          };
+          var formatRawFlag = function(val, type) {
+            if (val === null || val === undefined) return null;
+            var ev = evidence[type];
+            var hex = '0x' + Number(val).toString(16).toUpperCase();
+            var tag = ' <span style="font-size:9.5px;color:var(--green);font-weight:700">[Confirmed — AE Timings report]</span>';
+            var pop = '<div class="trace-flag-popover" role="tooltip">' +
+              '<div class="tfp-title">' + escapeHtml(type + ' = ' + val + ' (' + hex + ')') + '</div>' +
+              '<div class="tfp-row"><div class="tfp-k">Source</div><div class="tfp-v">' + escapeHtml(ev && ev.basis || 'Explicit value printed in the Application Engine Timings report.') + '</div></div>' +
+              (ev ? '<div class="tfp-row"><div class="tfp-k">Report line</div><div class="tfp-v">' + escapeHtml(String(ev.line)) + '</div></div><div class="tfp-evidence">' + escapeHtml(ev.rawLine) + '</div>' : '') +
+              '<div class="tfp-row"><div class="tfp-k">Note</div><div class="tfp-v">Bit-level meanings for this flag are not documented elsewhere in this reference, so only the raw reported value is shown.</div></div>' +
+              '</div>';
+            return '<span class="trace-flag-value" tabindex="0" aria-label="' + escapeHtml(type + ' value ' + val) + '"><strong>' + escapeHtml(String(val)) + '</strong> (' + hex + ')' + tag + pop + '</span>';
           };
         
           [
@@ -2972,7 +3486,12 @@
             ['TraceSQL Flag', formatFlag(flags.TraceSQL, 'TraceSQL')],
             ['TracePC Flag', formatFlag(flags.TracePC, 'TracePC')],
             ['TraceAE Flag', formatFlag(flags.TraceAE, 'TraceAE')]
-          ].forEach(function(x) {
+          ].concat(
+            // Only appears when the Application Engine Timings report supplied it — this bitmask
+            // has no documented meaning elsewhere in this tool, so it is shown raw rather than
+            // run through the bit-decode popover used for the three flags above.
+            flags.TraceAEDbFlags != null ? [['AE DbFlags', formatRawFlag(flags.TraceAEDbFlags, 'TraceAEDbFlags')]] : []
+          ).forEach(function(x) {
             var m = document.createElement('div');
             m.className = 'meta-item';
             m.innerHTML = '<div class="meta-k">' + escapeHtml(x[0]) + '</div><div class="meta-v">' + x[1] + '</div>';
@@ -3039,7 +3558,30 @@
           return {tables:tables,where:where,tokens:toks};
         }
         
-        function improveSQLMetadata(){(G.sql||[]).forEach(function(s){var x=extractSQLStructure(s.normalizedText || s.text);if(x.tables.length)s.tables=x.tables;if(x.where)s.where=x.where;s.tokenCount=x.tokens.length;});}
+        function improveSQLMetadata(){
+          (G.sql||[]).forEach(function(s){
+            var source=s.normalizedText || s.text || '';
+            var cleaned=stripAESQLDirectives(source).trim();
+            s.type=sqlType(cleaned);
+            s.normalizedText=cleaned;
+            var x=extractSQLStructure(cleaned);
+            if(x.tables.length) s.tables=x.tables;
+            else if(s.from) s.tables=parseTables(s.from,s.type);
+            s.where=x.where || s.where || '';
+            s.tokenCount=x.tokens.length;
+            s.fullText=String(s.text || cleaned).trim();
+          });
+          // Rebuild AET SQL Action Summary after classification/table normalization so
+          // the summary and SQL Statements grid always use the same parsed model.
+          if(G.meta && G.meta.fileExtension==='aet'){
+            var counts={};
+            ['SELECT','INSERT','UPDATE','DELETE','MERGE','TRUNCATE','RECSTATS','OTHER'].forEach(function(k){counts[k]={type:k,count:0,totalTime:0,errors:0,fetches:0,rows:0,avgTime:0,percent:0};});
+            (G.sql||[]).forEach(function(st){var k=counts[st.type]?st.type:'OTHER',g=counts[k];g.count++;g.totalTime+=st.dur||0;g.errors+=st.isErr?1:0;g.fetches+=st.fc||0;g.rows+=Number(st.rowCount)||0;});
+            var total=(G.sql||[]).reduce(function(a,st){return a+(st.dur||0);},0);
+            Object.keys(counts).forEach(function(k){var g=counts[k];g.avgTime=g.count?g.totalTime/g.count:0;g.percent=total?g.totalTime/total*100:0;});
+            G.ae.sqlGroups=counts;
+          }
+        }
         
         function normalizeVariableValue(value) {
           var s = decodeHtmlEntities(value == null ? '' : String(value)).trim();
@@ -3198,7 +3740,7 @@
             });
           }
           if (G.ae && G.ae.sqlGroups) {
-            ['SELECT','UPDATE','INSERT','DELETE','MERGE','OTHER'].forEach(function(t){var g=G.ae.sqlGroups[t];if(g&&g.count)S.push({cat:'AE SQL Actions',lbl:t,val:g.count+' / '+fmtSec(g.totalTime)+(g.rows?' / '+g.rows+' rows':'')});});
+            ['SELECT','UPDATE','INSERT','DELETE','MERGE','TRUNCATE','RECSTATS','OTHER'].forEach(function(t){var g=G.ae.sqlGroups[t];if(g&&g.count)S.push({cat:'AE SQL Actions',lbl:t,val:g.count+' / '+fmtSec(g.totalTime)+(g.rows?' / '+g.rows+' rows':'')});});
           }
           S.push({ cat: 'Execution Path', lbl: 'Max Call Depth', val: G.maxDepth });
           S.push({ cat: 'Execution Path', lbl: 'Total PeopleCode Calls', val: G._ppc || 0 });
@@ -3650,6 +4192,11 @@
             hb.appendChild(row);
           });
           d.appendChild(hotspots);
+
+          var aetTraceCard = renderAETTraceDetailsCard();
+          if (aetTraceCard) d.appendChild(aetTraceCard);
+          var aetSummaryCard = renderAETimingsSummaryCard();
+          if (aetSummaryCard) d.appendChild(aetSummaryCard);
         }
         function addKpi(p,l,v,s,k){ var el=document.createElement('div'); el.className='kpi '+(k||''); el.innerHTML='<div class="kpi-label">'+escapeHtml(l)+'</div><div class="kpi-value">'+escapeHtml(v)+'</div><div class="kpi-sub">'+escapeHtml(s)+'</div>'; p.appendChild(el); }
         function card(t,s){ var c=document.createElement('div'); c.className='card'; c.innerHTML='<div class="card-head"><div class="card-title">'+escapeHtml(t)+'</div><div class="card-subtitle">'+escapeHtml(s)+'</div></div><div class="card-body"></div>'; return c; }
@@ -3720,13 +4267,16 @@
           if (curSQL === 'type-update') return (G.sql || []).filter(function(s){return s.type === 'UPDATE';});
           if (curSQL === 'type-delete') return (G.sql || []).filter(function(s){return s.type === 'DELETE';});
           if (curSQL === 'type-merge') return (G.sql || []).filter(function(s){return s.type === 'MERGE';});
+          if (curSQL === 'type-truncate') return (G.sql || []).filter(function(s){return s.type === 'TRUNCATE';});
+          if (curSQL === 'type-recstats') return (G.sql || []).filter(function(s){return s.type === 'RECSTATS';});
+          if (curSQL === 'type-other') return (G.sql || []).filter(function(s){return s.type === 'OTHER';});
           return [];
         }
         
         function renderSQL() {
           var w = document.getElementById('sqlw'); w.innerHTML = '';
           var groups = G.ae && G.ae.sqlGroups ? G.ae.sqlGroups : {};
-          var order = ['SELECT','UPDATE','INSERT','DELETE','MERGE','OTHER'];
+          var order = ['SELECT','UPDATE','INSERT','DELETE','MERGE','TRUNCATE','RECSTATS','OTHER'];
           var validGroups = order.filter(function(k){return groups[k] && groups[k].count;});
           if (validGroups.length) {
             var wrap=document.createElement('div'); wrap.className='ae-sql-summary';
@@ -3740,7 +4290,7 @@
           var tbl = document.createElement('table'); tbl.className = 'dt';
           var thead = document.createElement('thead'), tr = thead.insertRow(); tbl.appendChild(thead);
           var cols = [];
-          var isAETView = G.meta && /Application Engine/.test(G.meta.format || '') && ['all','type-select','type-insert','type-update','type-delete','type-merge'].indexOf(curSQL) >= 0;
+          var isAETView = G.meta && /Application Engine/.test(G.meta.format || '') && ['all','type-select','type-insert','type-update','type-delete','type-merge','type-truncate','type-recstats','type-other'].indexOf(curSQL) >= 0;
           if (isAETView) cols = ['Line', 'AE Step', 'Action', 'Type', 'Table', 'Rows', 'Duration', 'SQL ID', 'Full SQL Text'];
           else if (curSQL === 'repeat') cols = ['Executions', 'Total Time', 'SQL %', 'Avg / P95 / P99', 'Max Time', 'SQL Pattern'];
           else if (curSQL === 'where') cols = ['Count', 'Total Time', 'WHERE Clause'];
@@ -3772,7 +4322,10 @@
               addCell(row, rowData.rowCount == null ? '—' : rowData.rowCount);
               addDurCell(row, rowData, maxDur);
               addCell(row, rowData.sqlId || '—');
-              addCell(row, rowData.text.slice(0, 500));
+              var sqlCell=row.insertCell();
+              sqlCell.className='aet-sql-full';
+              sqlCell.textContent=String(rowData.fullText || rowData.normalizedText || rowData.text || '');
+              sqlCell.title='Click the row to open the complete SQL statement';
             }
             else if (curSQL === 'repeat') { addCell(row, rowData.count); addCell(row, fmtSec(rowData.totalTime)); addCell(row, (rowData.sqlPercent||0).toFixed(1)+'%'); addCell(row, fmtSec(rowData.avgTime)+' / '+fmtSec(rowData.p95)+' / '+fmtSec(rowData.p99)); addCell(row, fmtSec(rowData.maxTime)); addCell(row, rowData.key.slice(0, 240)); }
             else if (curSQL === 'where') { addCell(row, rowData.count); addCell(row, fmtSec(rowData.totalTime)); addCell(row, rowData.whereClause || '(no WHERE)'); }
@@ -5007,7 +5560,32 @@
           if(dur>=slowSec || (s&&s.type==='SELECT' && !(s.where||'').trim()) || Number(f&&f.count)>1)return 'MEDIUM';
           return 'INFO';
         }
+        function exportAETCSV(){
+          var p=G.ae&&G.ae.aetProfile;
+          if(!p){alert('AET profile is not available.');return;}
+          var rows=[['Record Type','Trace Line','Timestamp','Program','Section','Step','Action','Depth','Duration (s)','Duration Source','SQL Type','Rows Affected','SQL Text','Lifecycle / Diagnostic Detail']];
+          (G.ae.steps||[]).forEach(function(st){
+            var sql=null;
+            (G.sql||[]).some(function(s){if(String(s.aeStepKey||'')===st.program+'.'+st.section+'.'+st.step){sql=s;return true;}return false;});
+            var ts=st.startLine&&G.rawLines[st.startLine-1]?((/^--\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d+\.\d+)/.exec(G.rawLines[st.startLine-1])||[])[1]||''):'';
+            rows.push(['AET_ACTION',st.startLine||'',ts,st.program||'',st.section||'',st.step||'',st.action||'',st.depth||'',st.duration!=null?Number(st.duration).toFixed(6):'',st.durationSource||'not-emitted',sql&&sql.type||'',sql&&sql.rowCount!=null?sql.rowCount:'',sql?substitutedSQL(sql):'',st.parent?'Parent: '+st.parent:'']);
+          });
+          (G.sql||[]).forEach(function(s){
+            rows.push(['AET_SQL',s.lineNumber||'', '',s.aeStepKey?s.aeStepKey.split('.')[0]:'',s.aeStepKey?s.aeStepKey.split('.')[1]:'',s.aeStepKey?s.aeStepKey.split('.')[2]:'',s.aeAction||'SQL','','', '',s.type||'',s.rowCount!=null?s.rowCount:'',substitutedSQL(s),s.isErr?'ERROR: '+(s.eMsg||classifyDbError(s)||'DATABASE_ERROR'):'']);
+          });
+          (G.ae.returnCodeEvents||[]).forEach(function(e){rows.push(['AET_CONTROL',e.line||'','','','','',e.kind||'', '', '', '', '', '', '',e.raw||'']);});
+          if(p.resumedAfterStep)rows.push(['AET_LIFECYCLE',p.firstAction?p.firstAction.line:'',p.firstTimestamp?p.firstTimestamp.date+' '+p.firstTimestamp.time:'',p.program||'','','','RESUME','','','','','','','Process '+(p.processInstance||'')+' resumed after '+p.resumedAfterStep]);
+          rows.push(['AET_LIFECYCLE','','',p.program||'','','','STATUS','','','','','','',p.status||'Unknown']);
+          (G.transactions&&G.transactions.commits||[]).forEach(function(x){rows.push(['AET_TRANSACTION',x.line||'','','','','','COMMIT','','','','','','',x.raw||'']);});
+          (G.transactions&&G.transactions.rollbacks||[]).forEach(function(x){rows.push(['AET_TRANSACTION',x.line||'','','','','','ROLLBACK','','','','','','',x.raw||'']);});
+          (G.rawLines||[]).forEach(function(line,i){if(/Restart Data CheckPointed/i.test(line))rows.push(['AET_CHECKPOINT',i+1,'','','','','Restart Data CheckPointed','','','','','','',line.trim()]);});
+          var csv='\ufeff'+rows.map(function(r){return r.map(csvCell).join(',');}).join('\r\n')+'\r\n';
+          var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}),a=document.createElement('a'),url=URL.createObjectURL(blob);
+          a.href=url;a.download='trace_insights_AET_diagnostics.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},1000);
+        }
+
         function exportCSV(){
+          if(G.meta && G.meta.fileExtension==='aet') { exportAETCSV(); return; }
           if(!G.sql.length){alert('No SQL statements are available to export.');return;}
           var rows=[['Trace Line','Execute Line','Error Line','Cursor ID','Context','SQL Type','Duration (s)','SQL %','Execute (s)','Fetch (s)','Fetch Calls','Bind Runs','Bind Count','Tables','WHERE','PeopleCode / AE Context','AE Step','Fingerprint','Repeat Count','Fingerprint Avg (s)','Fingerprint Max (s)','N+1 Score','N+1 Confidence','Diagnostic Priority','Diagnostic Flags','Error Category','Error Code','Error Message','SQL Text With Binds']];
           var fm=Object.create(null);
@@ -5399,7 +5977,9 @@
             var html='<div class="compare-step-panel"><h4>'+esc(label)+'</h4><div class="compare-step-meta">'+
               '<span class="k">Path signature</span><span>'+esc(step.key)+'</span>'+
               '<span class="k">Trace line</span><span>'+esc(step.startLine)+'</span>'+
-              '<span class="k">Duration</span><span>'+esc(fmtSec(step.dur))+'</span>'+
+              '<span class="k">Duration</span><span>'+esc(fmtSec(step.dur))+(step.durationSource?' • '+esc(step.durationSource):'')+'</span>'+
+              (step.aeAction?'<span class="k">AE Action</span><span>'+esc(step.aeAction)+'</span>':'')+
+              (step.aeProgram?'<span class="k">AE Program</span><span>'+esc(step.aeProgram+'.'+step.aeSection+'.'+step.aeStep)+'</span>':'')+
               '</div>';
             if(step.sqlText) html+='<div class="compare-step-section"><h4>SQL</h4><pre class="code-block">'+esc(step.sqlText)+'</pre></div>';
             if(step.binds && step.binds.length) html+='<div class="compare-step-section"><h4>SQL Binds</h4>'+listHtml(step.binds)+'</div>';
@@ -5468,6 +6048,39 @@
           return warnings;
         }
         
+        function renderAETCompareCard(m1,m2){
+          var a1=m1&&m1.ae&&m1.ae.aetProfile, a2=m2&&m2.ae&&m2.ae.aetProfile;
+          if(!a1&&!a2)return null;
+          function v(a,k){return a&&a[k]!=null?a[k]:'—';}
+          var rows=[
+            ['AET Process Instance',v(a1,'processInstance'),v(a2,'processInstance')],
+            ['AET Program',v(a1,'program'),v(a2,'program')],
+            ['Trace Status',v(a1,'status'),v(a2,'status')],
+            ['Action / Step Headers',v(a1,'actionCount'),v(a2,'actionCount')],
+            ['SQL Actions',v(a1,'sqlActions'),v(a2,'sqlActions')],
+            ['PeopleCode Actions',v(a1,'peopleCodeActions'),v(a2,'peopleCodeActions')],
+            ['Call Section Actions',v(a1,'callSections'),v(a2,'callSections')],
+            ['Rows-Affected Events',v(a1,'rowEvents'),v(a2,'rowEvents')],
+            ['Rows Affected Total',v(a1,'rowsAffectedTotal'),v(a2,'rowsAffectedTotal')],
+            ['COMMIT Markers',v(a1,'commits'),v(a2,'commits')],
+            ['ROLLBACK Markers',v(a1,'rollbacks'),v(a2,'rollbacks')],
+            ['Restart Checkpoints',v(a1,'checkpoints'),v(a2,'checkpoints')],
+            ['Skipped Steps',v(a1,'skippedSteps'),v(a2,'skippedSteps')],
+            ['Broken Loops',v(a1,'brokenLoops'),v(a2,'brokenLoops')],
+            ['Temp-Table Locks',v(a1,'tempLocks'),v(a2,'tempLocks')],
+            ['Temp-Table Unlocks',v(a1,'tempUnlocks'),v(a2,'tempUnlocks')],
+            ['UpdateStats Ignored',v(a1,'updateStatsIgnored'),v(a2,'updateStatsIgnored')],
+            ['Timestamp Span (s)',a1&&a1.elapsedSeconds!=null?Number(a1.elapsedSeconds).toFixed(3):'—',a2&&a2.elapsedSeconds!=null?Number(a2.elapsedSeconds).toFixed(3):'—']
+          ];
+          var card=document.createElement('div');card.className='diff-summary-card';card.style.borderLeftColor='var(--accent)';
+          var html='<div style="font-weight:700;font-size:13px;color:var(--accent);">Application Engine (.AET) Comparison</div><div style="margin-top:4px;font-size:10.5px;color:var(--dim);">AET-native step, control-flow, transaction, row-count, and temporary-table evidence. Timestamp span is wall-clock inferred, not an emitted action duration.</div>';
+          html+='<div style="margin-top:8px;overflow:auto;"><table class="aet-table" style="min-width:680px;"><thead><tr><th>Attribute</th><th>Trace 1</th><th>Trace 2</th></tr></thead><tbody>';
+          rows.forEach(function(r){var diff=String(r[1])!==String(r[2]);html+='<tr'+(diff?' style="color:var(--yellow);"':'')+'><td>'+escapeHtml(r[0])+'</td><td class="aet-mono">'+escapeHtml(String(r[1]))+'</td><td class="aet-mono">'+escapeHtml(String(r[2]))+'</td></tr>';});
+          html+='</tbody></table></div>';
+          if(a1&&a2&&a1.program!==a2.program)html+='<div class="diff-diag-box"><strong>AET program mismatch:</strong> '+escapeHtml(a1.program||'—')+' vs '+escapeHtml(a2.program||'—')+'. Path deviations may represent different AE programs rather than a code/data change within one program.</div>';
+          card.innerHTML=html;return card;
+        }
+
         function renderCompareConfigCard(m1, m2) {
           function fmtFlag(v){ return (v===null||v===undefined) ? 'Not detected' : (v + ' (0x' + Number(v).toString(16).toUpperCase() + ')'); }
           var rows = [
@@ -5506,6 +6119,8 @@
           tb.innerHTML = '';
         
           root.appendChild(renderCompareConfigCard(m1, m2));
+          var aetCompareCard=renderAETCompareCard(m1,m2);
+          if(aetCompareCard) root.appendChild(aetCompareCard);
         
           var aligned = diffRes.aligned;
           var div = diffRes.divergence;
